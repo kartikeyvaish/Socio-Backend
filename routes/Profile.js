@@ -62,6 +62,7 @@ router.get("/get-profile-details", CheckAuthToken, async (req, res) => {
       }
 
       const resultData = {
+        _id: req.query.user,
         Name: user.Name,
         Username: user.Username,
         Email: user.Email,
