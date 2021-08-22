@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const moment = require("moment");
 
 const Likes = mongoose.model(
   "Likes",
@@ -22,6 +23,10 @@ const Likes = mongoose.model(
     PostID: {
       type: String,
       required: true,
+    },
+    DateTime: {
+      type: Date,
+      default: moment(),
     },
   })
 );
