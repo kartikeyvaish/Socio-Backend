@@ -6,6 +6,7 @@ require("dotenv").config();
 const config = require("./config/Configurations");
 
 const Posts = require("./routes/Posts");
+const Profile = require("./routes/Profile");
 const User = require("./routes/Users");
 
 const db_url = `mongodb://${process.env.host}:${process.env.DB_PORT}/${process.env.DB_Name}`;
@@ -21,6 +22,7 @@ app.use(express.static(path.join(__dirname, "/public")));
 
 app.use(process.env.apiVersion + process.env.auth, User);
 app.use(process.env.apiVersion + process.env.posts, Posts);
+app.use(process.env.apiVersion + process.env.profile, Profile);
 
 app.get("*", (req, res) => {
   res.status(404).sendFile(__dirname + "/views/404.html");
