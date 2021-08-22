@@ -19,9 +19,21 @@ const Comments = mongoose.model(
       type: String,
       required: true,
     },
+    PostOwnerID: {
+      type: String,
+      required: true,
+    },
     Comment: {
       type: String,
       required: true,
+    },
+    LikedBy: {
+      type: Array,
+      default: [],
+    },
+    DateTime: {
+      type: Date,
+      default: new Date(),
     },
   })
 );
