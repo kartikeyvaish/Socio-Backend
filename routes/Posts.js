@@ -9,6 +9,7 @@ const { Helper } = require("../config/Helper");
 const { Likes } = require("../models/Likes");
 const { Followers } = require("../models/Followers");
 const { Comments } = require("../models/Comments");
+const { Notifications } = require("../models/Notifications");
 
 const { CheckAdminAccess, CheckAuthToken } = Helper;
 
@@ -21,7 +22,7 @@ router.get("/get-all-posts", CheckAdminAccess, async (req, res) => {
   }
 });
 
-router.get("/get-feed-for-user", CheckAuthToken, async (req, res) => {
+router.get("/get-feed-for-user*", CheckAuthToken, async (req, res) => {
   try {
     let newID = req.query?.lastID ? req.query.lastID : null;
 
@@ -112,15 +113,26 @@ router.post("/create-new-post", CheckAuthToken, async (req, res) => {
 
 router.delete("/delete-post", CheckAuthToken, async (req, res) => {
   try {
-    const checkPost = await Posts.findOne({ _id: req.body.PostID });
-    if (!checkPost) return res.status(404).send("Post Not Found");
+    if (req.query?.PostID) {
+      const checkPost = await Posts.findOne({ _id: req.query.PostID });
+      if (checkPost.UserID.toString() === req.body.CalledBy._id.toString()) {
+        if (!checkPost) return res.status(404).send("Post Not Found");
 
-    await Likes.deleteMany({ PostID: req.body.PostID });
-    await Comments.deleteMany({ PostID: req.body.PostID });
-    await checkPost.delete();
+        await Likes.deleteMany({ PostID: req.query.PostID });
+        await Comments.deleteMany({ PostID: req.query.PostID });
+        await Notifications.deleteMany({ PostID: req.query.PostID });
 
-    return res.status(200).send("Post Removed");
+        await checkPost.delete();
+
+        return res.status(200).send("Post Removed");
+      }
+      return res
+        .status(401)
+        .send("You are not the owner of post hence you cannot remove it.");
+    }
+    return res.status(404).send("Post Not Found");
   } catch (error) {
+    console.log(error);
     return res.status(500).send(config.messages.serverError);
   }
 });
