@@ -5,14 +5,13 @@ require("dotenv").config();
 
 const config = require("./config/Configurations");
 
+const Likes = require("./routes/Likes");
 const Posts = require("./routes/Posts");
 const Profile = require("./routes/Profile");
 const User = require("./routes/Users");
 
-const db_url = `mongodb://${process.env.host}:${process.env.DB_PORT}/${process.env.DB_Name}`;
-
 mongoose
-  .connect(db_url, config.db_config)
+  .connect(process.env.atlasURL, config.db_config)
   .then(() => console.log(`Connected to ${process.env.DB_Name} Mongo DB...`))
   .catch((error) => console.error(config.messages.serverError, error));
 
@@ -21,6 +20,7 @@ require("./config/Production")(app);
 app.use(express.static(path.join(__dirname, "/public")));
 
 app.use(process.env.apiVersion + process.env.auth, User);
+app.use(process.env.apiVersion + process.env.likes, Likes);
 app.use(process.env.apiVersion + process.env.posts, Posts);
 app.use(process.env.apiVersion + process.env.profile, Profile);
 
