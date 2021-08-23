@@ -50,9 +50,11 @@ router.put("/like-a-post", CheckAuthToken, async (req, res) => {
       DateTime: moment(),
     });
 
-    checkPost.Likes = checkPost.Likes + 1;
-    await checkPost.save();
     await newLikeObject.save();
+
+    const likeCounter = await Likes.find({ PostID: req.body.PostID });
+    checkPost.Likes = likeCounter.length;
+    await checkPost.save();
 
     if (req.body.CalledBy.Username !== checkPost.Username) {
       const postOwner = await Users.findOne({
@@ -79,7 +81,8 @@ router.put("/like-a-post", CheckAuthToken, async (req, res) => {
         SuffixPicture: checkPost.PreviewURL,
         content: `${req.body.CalledBy.Username} liked your post.`,
         notificationType: "PostLiked",
-        dateTime: moment(),
+        DateTime: moment(),
+        PostID: req.body.PostID,
         OperationOwner: req.body.CalledBy._id,
         OperationID: newLikeObject._id,
         OperationType: "PostLiked",
@@ -116,6 +119,12 @@ router.post("/unlike-a-post", CheckAuthToken, async (req, res) => {
 
     checkPost.Likes = checkPost.Likes - 1;
 
+    await checkLike.delete();
+
+    const likeCounter = await Likes.find({ PostID: req.body.PostID });
+    checkPost.Likes = likeCounter.length;
+    await checkPost.save();
+
     const findNew = await Notifications.findOne({
       OperationOwner: req.body.CalledBy._id,
       OperationID: checkLike._id,
@@ -123,9 +132,6 @@ router.post("/unlike-a-post", CheckAuthToken, async (req, res) => {
     });
 
     if (findNew) await findNew.delete();
-
-    await checkPost.save();
-    await checkLike.delete();
 
     return res.status(200).send({
       status: config.messages.postDisLiked,
