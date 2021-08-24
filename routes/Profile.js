@@ -122,7 +122,7 @@ router.get("/get-user-profile", CheckAuthToken, async (req, res) => {
 
     return res.send(resultData);
   } catch (error) {
-    return res.status(500).send("Error");
+    return res.status(500).send(config.messages.serverError);
   }
 });
 
