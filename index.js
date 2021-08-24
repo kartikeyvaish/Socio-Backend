@@ -20,6 +20,7 @@ require("./config/Production")(app);
 app.use(express.static(path.join(__dirname, "/public")));
 
 app.use(process.env.apiVersion + process.env.auth, User);
+app.use(process.env.apiVersion + process.env.otps, OTP);
 app.use(process.env.apiVersion + process.env.likes, Likes);
 app.use(process.env.apiVersion + process.env.posts, Posts);
 app.use(process.env.apiVersion + process.env.profile, Profile);
@@ -28,4 +29,4 @@ app.get("*", (req, res) => {
   res.status(404).sendFile(__dirname + "/views/404.html");
 });
 
-app.listen(config.Port, () => console.log(`Listening on ${config.Port}..`));
+server.listen(config.Port, () => console.log(`Listening on ${config.Port}..`));
