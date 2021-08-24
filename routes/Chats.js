@@ -193,8 +193,6 @@ router.post("/send-message", CheckAuthToken, async (req, res) => {
 
 router.post("/send-post-as-message", CheckAuthToken, async (req, res) => {
   try {
-    console.log(req.body);
-
     const post = await Posts.findOne({ _id: req.body.PostID });
 
     if (!post) return res.status(404).send("Post Not Found");
@@ -311,7 +309,6 @@ router.post("/send-post-as-message", CheckAuthToken, async (req, res) => {
       return res.send(newMessage);
     }
   } catch (error) {
-    console.log(error);
     return res.status(500).send(config.messages.serverError);
   }
 });
@@ -460,7 +457,7 @@ router.put("/mark-as-read", CheckAuthToken, async (req, res) => {
       return res.status(404).send("Room ID is required");
     }
   } catch (error) {
-    return res.status(500).send("Error");
+    return res.status(500).send(config.messages.serverError);
   }
 });
 
