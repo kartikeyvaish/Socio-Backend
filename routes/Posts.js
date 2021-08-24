@@ -132,7 +132,6 @@ router.delete("/delete-post", CheckAuthToken, async (req, res) => {
     }
     return res.status(404).send("Post Not Found");
   } catch (error) {
-    console.log(error);
     return res.status(500).send(config.messages.serverError);
   }
 });
