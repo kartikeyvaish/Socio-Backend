@@ -46,15 +46,19 @@ const Users = mongoose.model(
       type: String,
       required: true,
     },
-    OTP: {
-      type: String,
-      default: "",
-    },
     Token: {
       type: String,
       default: "",
     },
-    Verified: {
+    Bio: {
+      type: String,
+      default: "",
+    },
+    AccountVerified: {
+      type: Boolean,
+      default: false,
+    },
+    EmailVerified: {
       type: Boolean,
       default: false,
     },
