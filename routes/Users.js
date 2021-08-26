@@ -3,6 +3,8 @@ const bcrypt = require("bcrypt");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
+const moment = require("moment");
+const { random } = require("lodash");
 
 const config = require("../config/Configurations");
 const { Helper } = require("../config/Helper");
@@ -11,11 +13,11 @@ const { Comments } = require("../models/Comments");
 const { Likes } = require("../models/Likes");
 const { Posts } = require("../models/Posts");
 const { Users, RegisterSchema, LoginSchema } = require("../models/Users");
-const {
-  SendPushNotification,
-  SendGenericNotification,
-  BatchPush,
-} = require("../config/PushNotifications");
+const { OTP } = require("../models/OTP");
+const { SendPushNotification } = require("../config/PushNotifications");
+const { SendOTPEmail } = require("../config/Mailer");
+
+const TimeLimit = 10;
 
 router.get("/get-users-list", CheckAdminAccess, async (req, res) => {
   try {
@@ -53,6 +55,9 @@ router.post("/login", async (req, res) => {
       "Username",
       "Token",
       "_id",
+      "RandomAPI",
+      "Email",
+      "Bio",
     ]);
 
     decodedUser.ProfilePicture = user.PicURL;
@@ -89,6 +94,8 @@ router.post("/register", async (req, res) => {
       Username: req.body.Username,
       Password: req.body.Password,
       Admin: req.body.Admin || false,
+      AccountVerified: false,
+      EmailVerified: req.body.EmailVerified || false,
     });
 
     if (req.body.ProfilePicture) {
@@ -97,7 +104,7 @@ router.post("/register", async (req, res) => {
       }
     }
 
-    user.PicURL = `${config.apiVersion}/auth/users/${user._id}`;
+    user.PicURL = `${process.env.apiVersion}/auth/users/${user._id}`;
 
     const salt = await bcrypt.genSalt(10);
     user.Password = await bcrypt.hash(user.Password, salt);
@@ -114,17 +121,13 @@ router.post("/register", async (req, res) => {
     if (req.body.PushToken) {
       user.PushToken = req.body.PushToken;
       const newNotification = {
-        subText: "",
+        body: `Hey ${req.body.Name}, Welcome to Socio.`,
         title: "Socio",
-        message: `Hey ${req.body.Name}, Welcome to Socio.`,
-        largeIconUrl: "",
-        bigLargeIconUrl: "",
-        bigPictureUrl: "",
-        channelId: "SocioDefault",
       };
       await SendPushNotification({
         PushToken: req.body.PushToken,
-        Data: newNotification,
+        Data: {},
+        notification: newNotification,
       });
     }
 
@@ -159,6 +162,114 @@ router.delete("/logout", CheckAuthToken, async (req, res) => {
     return res.send("You are now logged out");
   } catch (error) {
     return res.status(500).send(config.messages.serverError);
+  }
+});
+
+router.get("/email-register", async (req, res) => {
+  try {
+    if (req.query?.email) {
+      const user = await Users.findOne({ Email: req.query.email });
+      if (user)
+        return res.status(401).send({
+          response: `${config.messages.accountMissing}. Proceed to Login`,
+        });
+
+      const createdAt = moment();
+      const validTill = moment(createdAt).add(TimeLimit, "minutes");
+      const OTP_Random = random(100000, 999999);
+
+      const newOtp = new OTP({
+        Verification: {
+          Type: "Email",
+          Email: req.query.email,
+        },
+        CreatedAt: createdAt,
+        ValidTill: validTill,
+        OTP: OTP_Random,
+      });
+
+      await newOtp.save();
+
+      const sendMail = await SendOTPEmail({
+        to: req.query.email,
+        subject: "Email Verification",
+        locals: {
+          OTP: OTP_Random,
+        },
+      });
+
+      if (sendMail.ok) {
+        return res.status(200).send({
+          response: _.pick(newOtp.toObject(), ["_id"]),
+        });
+      } else {
+        return res.status(500).send({
+          response: config.messages.serverError,
+        });
+      }
+    } else {
+      return res.status(404).send({
+        response: `Email ID is required`,
+      });
+    }
+  } catch (error) {
+    return res.status(500).send({
+      response: config.messages.serverError,
+    });
+  }
+});
+
+router.post("/forgot-otp-check-email", async (req, res) => {
+  try {
+    if (req.body?.email) {
+      const user = await Users.findOne({ Email: req.body.email });
+      if (!user)
+        return res.status(401).send({
+          response: `Account. With this email not found`,
+        });
+
+      const createdAt = moment();
+      const validTill = moment(createdAt).add(TimeLimit, "minutes");
+      const OTP_Random = random(100000, 999999);
+
+      const newOtp = new OTP({
+        Verification: {
+          Type: "ForgotPassword",
+          Email: req.body.email,
+        },
+        CreatedAt: createdAt,
+        ValidTill: validTill,
+        OTP: OTP_Random,
+      });
+
+      await newOtp.save();
+
+      const sendMail = await SendOTPEmail({
+        to: req.body.email,
+        subject: "Forgot Password OTP",
+        locals: {
+          OTP: OTP_Random,
+        },
+      });
+
+      if (sendMail.ok) {
+        return res.status(200).send({
+          response: _.pick(newOtp.toObject(), ["_id"]),
+        });
+      } else {
+        return res.status(500).send({
+          response: config.messages.serverError,
+        });
+      }
+    } else {
+      return res.status(404).send({
+        response: `Email ID is required`,
+      });
+    }
+  } catch (error) {
+    return res.status(500).send({
+      response: config.messages.serverError,
+    });
   }
 });
 
@@ -217,8 +328,9 @@ router.put("/change-password", CheckAuthToken, async (req, res) => {
   }
 });
 
-router.put("/reset-password", CheckAuthToken, async (req, res) => {
+router.post("/reset-password", async (req, res) => {
   try {
+    console.log(req.body);
     let user = await Users.findOne({ Email: req.body.Email });
     if (!user) return res.status(404).send(config.messages.accountMissing);
 
@@ -228,6 +340,7 @@ router.put("/reset-password", CheckAuthToken, async (req, res) => {
     await user.save();
     return res.status(200).send(config.messages.passwordChanged);
   } catch (error) {
+    console.log(error);
     return res.status(500).send(config.messages.serverError);
   }
 });
@@ -257,7 +370,7 @@ router.delete("/delete-account", CheckAuthToken, async (req, res) => {
   }
 });
 
-router.get("/users/:id", async (req, res) => {
+router.get("/users/:id*", async (req, res) => {
   try {
     const user = await Users.findById({ _id: req.params.id });
     let toSendPicture = "";
@@ -278,45 +391,6 @@ router.get("/users/:id", async (req, res) => {
       "Content-Length": ProfilePicture.length,
     });
     res.end(ProfilePicture);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.post("/send-push-notifications", CheckAdminAccess, async (req, res) => {
-  try {
-    const response = await SendPushNotification({
-      PushToken: req.body.to,
-      Data: req.body.data,
-      notification: req.body.notification,
-    });
-
-    return res.status(response.status).send(response.data);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.post("/generic-push", CheckAdminAccess, async (req, res) => {
-  try {
-    const response = await SendGenericNotification({
-      PushTokens: req.body.to,
-      Data: req.body.data,
-    });
-
-    return res.status(response.status).send(response.data);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.post("/batch-push", CheckAdminAccess, async (req, res) => {
-  try {
-    const response = await BatchPush({
-      Messages: req.body.Messages,
-    });
-
-    return res.status(response.status).send(response.data);
   } catch (error) {
     return res.status(500).send(config.messages.serverError);
   }
