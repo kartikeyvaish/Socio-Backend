@@ -4,7 +4,6 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
 const moment = require("moment");
-const { random } = require("lodash");
 
 const config = require("../config/Configurations");
 const { Helper } = require("../config/Helper");
@@ -15,6 +14,7 @@ const { Posts } = require("../models/Posts");
 const { Users, RegisterSchema, LoginSchema } = require("../models/Users");
 const { OTP } = require("../models/OTP");
 const { SendPushNotification } = require("../config/PushNotifications");
+const { random } = require("lodash");
 const { SendOTPEmail } = require("../config/Mailer");
 
 const TimeLimit = 10;
