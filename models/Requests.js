@@ -1,17 +1,15 @@
 const mongoose = require("mongoose");
 
-const Requests = mongoose.model(
-  "Requests",
+const requests = mongoose.model(
+  "requests",
   new mongoose.Schema({
-    RequestedBy: {
-      type: Object,
-      required: true,
-    },
-    RequestedTo: {
-      type: Object,
+    user_id: { type: mongoose.Schema.ObjectId, ref: "users", required: true },
+    request_sent_to: {
+      type: mongoose.Schema.ObjectId,
+      ref: "users",
       required: true,
     },
   })
 );
 
-exports.Requests = Requests;
+exports.requests = requests;

@@ -1,8 +1,14 @@
+// Importing Packages
 const express = require("express");
 const mongoose = require("mongoose");
 const path = require("path");
 require("dotenv").config();
 
+// Importing files
+const config = require("./config/config");
+const messages = require("./config/messages");
+
+// Socket Setup
 const http = require("http");
 const socketio = require("socket.io");
 const {
@@ -10,33 +16,37 @@ const {
   getCurrentUser,
   userLeave,
   getRoomUsers,
-} = require("./utils/users");
+} = require("./utils/chat_socket_users");
 
-const config = require("./config/Configurations");
-
+// Importing routes
 const Chats = require("./routes/Chats");
 const Comments = require("./routes/Comments");
-const Notifications = require("./routes/Notifications");
 const Likes = require("./routes/Likes");
-const PushNotifications = require("./routes/PushNotifications");
+const Notifications = require("./routes/notifications");
+const OTP = require("./routes/OTP");
+const People = require("./routes/People");
 const Posts = require("./routes/Posts");
 const Profile = require("./routes/Profile");
-const OTP = require("./routes/OTP");
-const Requests = require("./routes/Requests");
 const User = require("./routes/Users");
 
+// Connect to MongoDB
 mongoose
-  .connect(process.env.atlasURL, config.db_config)
+  .connect(config.db_url, config.db_config)
   .then(() => console.log(`Connected to ${process.env.DB_Name} Mongo DB...`))
-  .catch((error) => console.error(config.messages.serverError, error));
+  .catch((error) => console.error(messages.serverError, error));
 
+// Express app initialization
 const app = express();
+// Configuring Express app for production
 require("./config/Production")(app);
+// Configuring Express to use static files
 app.use(express.static(path.join(__dirname, "/public")));
 
+// Wrapping Express app with Socket.io
 const server = http.createServer(app);
 const io = socketio(server);
 
+// Socket listeners
 io.on("connection", (socket) => {
   socket.on("joinRoom", ({ username, room }) => {
     const user = userJoin(socket.id, username, room);
@@ -73,22 +83,16 @@ io.on("connection", (socket) => {
   });
 });
 
-app.use(process.env.apiVersion + process.env.auth, User);
+// Use these routes below
 app.use(process.env.apiVersion + process.env.chats, Chats);
 app.use(process.env.apiVersion + process.env.comments, Comments);
-app.use(process.env.apiVersion + process.env.otps, OTP);
 app.use(process.env.apiVersion + process.env.likes, Likes);
 app.use(process.env.apiVersion + process.env.notifications, Notifications);
+app.use(process.env.apiVersion + process.env.otp, OTP);
+app.use(process.env.apiVersion + process.env.people, People);
 app.use(process.env.apiVersion + process.env.posts, Posts);
-app.use(
-  process.env.apiVersion + process.env.pushnotifications,
-  PushNotifications
-);
 app.use(process.env.apiVersion + process.env.profile, Profile);
-app.use(process.env.apiVersion + process.env.requests, Requests);
+app.use(process.env.apiVersion + process.env.auth, User);
 
-app.get("*", (req, res) => {
-  res.status(404).sendFile(__dirname + "/views/404.html");
-});
-
+// Server listening on port
 server.listen(config.Port, () => console.log(`Listening on ${config.Port}..`));

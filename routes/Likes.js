@@ -1,169 +1,171 @@
+// package and other modules
 const express = require("express");
+const mongoose = require("mongoose");
 const moment = require("moment");
+
+// static imports
+const messages = require("../config/messages");
+const { AdminAuth, UserAuth } = require("../schemas/Auth");
+const { likes } = require("../models/Likes");
+const { posts } = require("../models/Posts");
+const { notifications } = require("../models/Notifications");
+
+// Initialize router
 const router = express.Router();
 
-const config = require("../config/Configurations");
-
-const { Posts } = require("../models/Posts");
-const { Helper } = require("../config/Helper");
-const { Likes } = require("../models/Likes");
-const { Users } = require("../models/Users");
-const { Notifications } = require("../models/Notifications");
-const { SendPushNotification } = require("../config/PushNotifications");
-
-const { CheckAdminAccess, CheckAuthToken } = Helper;
-
-const BaseURL = process.env.BaseURL;
-
-router.get("/get-all-likes", CheckAdminAccess, async (req, res) => {
+// Get List of all likes in Database
+router.get("/get-all-likes-list", AdminAuth, async (req, res) => {
   try {
-    const likes = await Likes.find();
-    return res.status(200).send({ LikesCount: likes.length, Likes: likes });
+    const all_likes = await likes.find();
+
+    return res.status(200).send({ Likes: all_likes });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.put("/like-a-post", CheckAuthToken, async (req, res) => {
+// Like a Post
+router.put("/like-a-post", UserAuth, async (req, res) => {
   try {
-    const checkPost = await Posts.findOne({
-      _id: req.body.PostID,
+    const checkPost = await posts.findOne({
+      _id: req.body.post_id,
     });
-    if (!checkPost) return res.status(404).send(config.messages.postMissing);
+    if (!checkPost) return res.status(404).send(messages.postMissing);
 
-    const checkLike = await Likes.findOne({
-      PostID: req.body.PostID,
-      UserID: req.body.CalledBy._id,
+    const checkLike = await likes.findOne({
+      user_id: req.body.user_details._id,
+      post_id: mongoose.Types.ObjectId(req.body.post_id),
     });
-    if (checkLike)
-      return res.status(200).send({
-        status: config.messages.postAlreadyLiked,
-        count: checkPost.Likes,
+    if (checkLike) return res.status(200).send(messages.postLiked);
+
+    const newLike = new likes({
+      user_id: req.body.user_details._id,
+      post_id: req.body.post_id,
+      liked_on: moment(),
+    });
+    await newLike.save();
+
+    // check if post owner is not the same as the user who liked the post
+    if (checkPost.user_id.toString() !== req.body.user_details._id.toString()) {
+      // Create a Notification for Like
+      const newNotification = new notifications({
+        user_id: req.body.user_details._id,
+        notification_type: "like",
+        post_id: mongoose.Types.ObjectId(req.body.post_id),
+        notify_to: checkPost.user_id,
+        operation_type_id: mongoose.Types.ObjectId(newLike._id),
+        created_at: moment(),
       });
 
-    const newLikeObject = new Likes({
-      UserID: req.body.CalledBy._id,
-      Username: req.body.CalledBy.Username,
-      PostID: req.body.PostID,
-      Name: req.body.CalledBy.Name,
-      ProfilePicture: req.body.CalledBy.PicURL,
-      DateTime: moment(),
-    });
-
-    await newLikeObject.save();
-
-    const likeCounter = await Likes.find({ PostID: req.body.PostID });
-    checkPost.Likes = likeCounter.length;
-    await checkPost.save();
-
-    if (req.body.CalledBy.Username !== checkPost.Username) {
-      const postOwner = await Users.findOne({
-        _id: checkPost.UserID,
-      });
-
-      if (postOwner) {
-        await SendPushNotification({
-          PushToken: postOwner.PushToken,
-          Data: {
-            showInForeGround: "false",
-          },
-          notification: {
-            body: `${req.body.CalledBy.Username} liked your post.`,
-            title: "Socio",
-            image: BaseURL + checkPost.PreviewURL,
-          },
-        });
-      }
-
-      const newNotify = new Notifications({
-        UserID: postOwner._id,
-        PrefixPicture: req.body.CalledBy.PicURL,
-        SuffixPicture: checkPost.PreviewURL,
-        content: `${req.body.CalledBy.Username} liked your post.`,
-        notificationType: "PostLiked",
-        DateTime: moment(),
-        PostID: req.body.PostID,
-        OperationOwner: req.body.CalledBy._id,
-        OperationID: newLikeObject._id,
-        OperationType: "PostLiked",
-      });
-
-      await newNotify.save();
+      await newNotification.save();
     }
 
-    return res.status(200).send({
-      status: config.messages.postLiked,
-      count: checkPost.Likes,
+    // Count No. of likes for this post
+    const countLikes = await likes.countDocuments({
+      post_id: mongoose.Types.ObjectId(req.body.post_id),
     });
+
+    return res
+      .status(200)
+      .send({ likes_count: countLikes, response: messages.postLiked });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.post("/unlike-a-post", CheckAuthToken, async (req, res) => {
+// Unlike a Post
+router.delete("/unlike-a-post", UserAuth, async (req, res) => {
   try {
-    const checkPost = await Posts.findOne({
-      _id: req.body.PostID,
+    const checkPost = await posts.findOne({
+      _id: req.body.post_id,
     });
-    if (!checkPost) return res.status(404).send(config.messages.postMissing);
+    if (!checkPost) return res.status(404).send(messages.postMissing);
 
-    const checkLike = await Likes.findOne({
-      PostID: req.body.PostID,
-      UserID: req.body.CalledBy._id,
+    const checkLike = await likes.findOne({
+      user_id: req.body.user_details._id,
+      post_id: mongoose.Types.ObjectId(req.body.post_id),
     });
-    if (!checkLike)
-      return res.status(200).send({
-        status: config.messages.postAlreadyDisLiked,
-        count: checkPost.Likes,
-      });
-
-    checkPost.Likes = checkPost.Likes - 1;
+    if (!checkLike) return res.status(200).send(messages.postDisLiked);
 
     await checkLike.delete();
 
-    const likeCounter = await Likes.find({ PostID: req.body.PostID });
-    checkPost.Likes = likeCounter.length;
-    await checkPost.save();
+    // Delete a Notification for Like
+    const checkNotification = await notifications.findOne({
+      user_id: req.body.user_details._id,
+      notification_type: "like",
+      post_id: mongoose.Types.ObjectId(req.body.post_id),
+    });
+    if (checkNotification) await checkNotification.delete();
 
-    const findNew = await Notifications.findOne({
-      OperationOwner: req.body.CalledBy._id,
-      OperationID: checkLike._id,
-      OperationType: "PostLiked",
+    // Count No. of likes for this post
+    const countLikes = await likes.countDocuments({
+      post_id: mongoose.Types.ObjectId(req.body.post_id),
     });
 
-    if (findNew) await findNew.delete();
-
-    return res.status(200).send({
-      status: config.messages.postDisLiked,
-      count: checkPost.Likes,
-    });
+    return res
+      .status(200)
+      .send({ likes_count: countLikes, response: messages.postDisLiked });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.get("/get-all-likes-on-post", CheckAuthToken, async (req, res) => {
+router.get("/get-all-likes-on-post", UserAuth, async (req, res) => {
   try {
-    if (req.query?.PostID) {
-      const checkPost = await Posts.findOne({
-        _id: req.query?.PostID,
+    if (req.query?.post_id) {
+      const checkPost = await posts.findOne({
+        _id: req.query?.post_id,
       });
-      if (!checkPost) return res.status(404).send(config.messages.postMissing);
+      if (!checkPost) return res.status(404).send(messages.postMissing);
 
-      const allLikes = await Likes.find({
-        PostID: req.query?.PostID,
-      });
+      const allLikes = await likes.aggregate([
+        // Match with post id
+        { $match: { post_id: mongoose.Types.ObjectId(req.query?.post_id) } },
+        // Join with user details
+        {
+          $lookup: {
+            from: "users",
+            localField: "user_id",
+            foreignField: "_id",
+            // include only username and prrofile picture
+            pipeline: [
+              {
+                $project: {
+                  Name: 1,
+                  Username: 1,
+                  ProfilePicture: 1,
+                },
+              },
+            ],
+            as: "user_details",
+          },
+        },
+        {
+          $replaceRoot: {
+            newRoot: {
+              $mergeObjects: [{ $arrayElemAt: ["$user_details", 0] }, "$$ROOT"],
+            },
+          },
+        },
+        // Remove fields not required
+        {
+          $project: {
+            post_id: 0,
+            liked_on: 0,
+            __v: 0,
+            user_details: 0,
+          },
+        },
+      ]);
 
-      checkPost.Likes = allLikes.length;
-      checkPost.save();
-
-      return res.send(allLikes);
+      return res.send({ Likes: allLikes });
     } else {
-      return res.status(404).send(config.messages.postNotFound);
+      return res.status(404).send(messages.postNotFound);
     }
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
+// export router
 module.exports = router;

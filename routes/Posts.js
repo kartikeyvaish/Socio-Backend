@@ -1,224 +1,462 @@
 const express = require("express");
-const moment = require("moment");
 const router = express.Router();
+const multer = require("multer");
+const mongoose = require("mongoose");
+const moment = require("moment");
 
-const config = require("../config/Configurations");
+const { AdminAuth, UserAuth } = require("../schemas/Auth");
+const messages = require("../config/messages");
+const { posts } = require("../models/Posts");
+const { likes } = require("../models/Likes");
+const { comments } = require("../models/Comments");
+const { notifications } = require("../models/Notifications");
+const { UploadToCloudinary, cloudinary } = require("../utils/cloudinary");
+const { followings } = require("../models/Following");
 
-const { Posts } = require("../models/Posts");
-const { Helper } = require("../config/Helper");
-const { Likes } = require("../models/Likes");
-const { Followers } = require("../models/Followers");
-const { Comments } = require("../models/Comments");
-const { Notifications } = require("../models/Notifications");
+// Multer configuration
+const upload = multer({ storage: multer.memoryStorage() });
+const new_post_config = [
+  {
+    name: "file",
+    maxCount: 1,
+  },
+  {
+    name: "preview_file",
+    maxCount: 1,
+  },
+];
 
-const { CheckAdminAccess, CheckAuthToken } = Helper;
-
-router.get("/get-all-posts", CheckAdminAccess, async (req, res) => {
+// get all posts
+router.get("/get-posts-list", AdminAuth, async (req, res) => {
   try {
-    const posts = await Posts.find({}, { UserID: 1, Username: 1, FileType: 1 });
-    return res.status(200).send({ PostsCount: posts.length, Posts: posts });
+    const postsList = await posts.find();
+
+    return res.status(200).send({ Posts: postsList });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.get("/get-feed-for-user*", CheckAuthToken, async (req, res) => {
+// Get Feed for a user including Following's posts and own posts
+router.get("/get-feed-for-user", UserAuth, async (req, res) => {
   try {
-    let newID = req.query?.lastID ? req.query.lastID : null;
+    // Check if request has a last_post_id as query param
+    let last_id_query = req.query?.last_post_id
+      ? mongoose.Types.ObjectId(req.query.last_post_id)
+      : null;
 
-    let DateFilter = newID ? { _id: { $lt: newID } } : {};
+    // Create a filter if last_post_id is present
+    let after_this_id_filter = last_id_query
+      ? { _id: { $lt: last_id_query } }
+      : {};
 
-    const allFollowing = await Followers.find(
+    // Get the user's following list
+    const allFollowing = await followings.find(
       {
-        UserID: req.body.CalledBy._id,
+        user_id: req.body.user_details._id,
       },
-      { FollowerOf: 1 }
+      { following_id: 1 }
     );
 
-    const tempFollow = allFollowing.map((s) => s.FollowerOf.toString());
-
-    const feedPosts = await Posts.find(
+    // Get Posts here using aggregate and lookup
+    const feedPosts = await posts.aggregate([
       {
-        ...DateFilter,
-        $or: [
-          { UserID: { $in: tempFollow } },
-          { UserID: req.body.CalledBy._id },
-        ],
+        // Match with filter and user_id, also with the people user is following
+        $match: {
+          ...after_this_id_filter,
+          $or: [
+            { user_id: req.body.user_details._id },
+            {
+              user_id: { $in: allFollowing.map((item) => item.following_id) },
+            },
+          ],
+        },
       },
+      // sort them in descending order of _id
       {
-        File: 0,
-        Preview: 0,
+        $sort: {
+          _id: -1,
+        },
+      },
+      // limit to 10
+      {
+        $limit: 10,
+      },
+      // lookup the user_id in users collection
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "user_details",
+        },
+      },
+      // take username and ProfilePicture and add it to the post
+      {
+        $addFields: {
+          Username: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.Username", 0],
+              },
+              [],
+            ],
+          },
+          ProfilePicture: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.ProfilePicture", 0],
+              },
+              [],
+            ],
+          },
+        },
+      },
+      // Lookup likes and its details
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "post_id",
+          pipeline: [{ $project: { user_id: 1 } }],
+          as: "liked_by",
+        },
+      },
+      // Lookup comments and its details
+      {
+        $lookup: {
+          from: "comments",
+          localField: "_id",
+          foreignField: "post_id",
+          as: "commented_by",
+        },
+      },
+      // Add likes count
+      {
+        $addFields: {
+          likes_count: {
+            $size: "$liked_by",
+          },
+          // Check if liked by user
+          is_liked: {
+            $cond: {
+              if: {
+                $in: [
+                  mongoose.Types.ObjectId(req.body.user_details._id),
+                  "$liked_by.user_id",
+                ],
+              },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      // Add comments count
+      {
+        $addFields: {
+          comments_count: {
+            $size: "$commented_by",
+          },
+        },
+      },
+      // remove unnecessary fields
+      { $project: { user_details: 0, __v: 0, liked_by: 0, commented_by: 0 } },
+    ]);
+
+    return res
+      .status(200)
+      .send({ PostsCount: feedPosts.length, Posts: feedPosts });
+  } catch (error) {
+    return res.status(500).send(messages.serverError);
+  }
+});
+
+// Create a Post
+router.post(
+  "/create-a-post",
+  upload.fields(new_post_config),
+  UserAuth,
+  async (req, res) => {
+    try {
+      if (
+        req.files &&
+        req.files?.file?.length &&
+        req.files?.preview_file?.length
+      ) {
+        const newPost = new posts({
+          user_id: req.body.user_details._id,
+          posted_on: moment(),
+          location: req.body.location,
+          caption: req.body.caption,
+          mime_type: req.files?.file?.[0].mimetype,
+          dimensions: {
+            width: req.body.width || 0,
+            height: req.body.height || 0,
+          },
+          ...req.body,
+        });
+
+        const destination = `users/${req.body.user_details._id}/Posts/${newPost._id}/`;
+
+        const fileUploadResponse = await UploadToCloudinary(
+          req.files?.file?.[0].buffer,
+          destination
+        );
+
+        if (fileUploadResponse?.url?.length)
+          newPost.file = fileUploadResponse.url;
+        else return res.status(500).send(messages.serverError);
+
+        const previewUploadResponse = await UploadToCloudinary(
+          req.files?.preview_file?.[0].buffer,
+          destination
+        );
+
+        if (previewUploadResponse?.url?.length)
+          newPost.preview_file = previewUploadResponse.url;
+        else return res.status(500).send(messages.serverError);
+
+        await newPost.save();
+        return res.status(200).send(newPost);
       }
-    )
-      .sort({ DateTime: -1 })
-      .limit(10);
 
-    let finalResult = feedPosts.map((item) => item.toObject());
-    for (let index = 0; index < finalResult.length; index++) {
-      const findLike = await Likes.findOne({
-        UserID: req.body.CalledBy._id,
-        PostID: finalResult[index]._id.toString(),
-      });
-
-      if (findLike) {
-        finalResult[index].LikedByUser = true;
-      } else {
-        finalResult[index].LikedByUser = false;
-      }
+      return res.status(404).send(messages.fileMissing);
+    } catch (error) {
+      return res.status(500).send(messages.serverError);
     }
+  }
+);
 
-    return res.status(200).send(finalResult);
+// Get posts by user
+router.get("/get-posts-by-user", UserAuth, async (req, res) => {
+  try {
+    const allPosts = await posts.aggregate([
+      // Match to find by _id
+      { $match: { user_id: req.body.user_details._id } },
+      // Lookup user and its details
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "user_details",
+        },
+      },
+      // take username and ProfilePicture and add it to the post
+      {
+        $addFields: {
+          Username: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.Username", 0],
+              },
+              [],
+            ],
+          },
+          ProfilePicture: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.ProfilePicture", 0],
+              },
+              [],
+            ],
+          },
+        },
+      },
+      // Lookup likes and its details
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "post_id",
+          pipeline: [{ $project: { user_id: 1 } }],
+          as: "liked_by",
+        },
+      },
+      // Lookup comments and its details
+      {
+        $lookup: {
+          from: "comments",
+          localField: "_id",
+          foreignField: "post_id",
+          as: "commented_by",
+        },
+      },
+      // Add likes count
+      {
+        $addFields: {
+          likes_count: {
+            $size: "$liked_by",
+          },
+          // Check if liked by user
+          is_liked: {
+            $cond: {
+              if: {
+                $in: [
+                  mongoose.Types.ObjectId(req.body.user_details._id),
+                  "$liked_by.user_id",
+                ],
+              },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      // Add comments count
+      {
+        $addFields: {
+          comments_count: {
+            $size: "$commented_by",
+          },
+        },
+      },
+      // remove unnecessary fields
+      { $project: { user_details: 0, __v: 0, liked_by: 0, commented_by: 0 } },
+    ]);
+
+    return res.status(200).send({ Posts: allPosts });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.post("/get-all-posts-for-user", CheckAuthToken, async (req, res) => {
+// Get a Post Detail
+router.get("/get-post-detail", UserAuth, async (req, res) => {
   try {
-    const posts = await Posts.find(
-      { UserID: req.body.UserID },
-      { UserID: 1, Username: 1, FileType: 1, Likes: 1, Comments: 1 }
-    );
-    return res.status(200).send({ PostsCount: posts.length, Posts: posts });
+    const postDetail = await posts.aggregate([
+      // Match to find by _id
+      { $match: { _id: mongoose.Types.ObjectId(req.query._id) } },
+      // limit to 1
+      { $limit: 1 },
+      // Lookup user and its details
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "user_details",
+        },
+      },
+      // take username and ProfilePicture and add it to the post
+      {
+        $addFields: {
+          Username: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.Username", 0],
+              },
+              [],
+            ],
+          },
+          ProfilePicture: {
+            $ifNull: [
+              {
+                $arrayElemAt: ["$user_details.ProfilePicture", 0],
+              },
+              [],
+            ],
+          },
+        },
+      },
+      // Lookup likes and its details
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "post_id",
+          pipeline: [{ $project: { user_id: 1 } }],
+          as: "liked_by",
+        },
+      },
+      // Lookup comments and its details
+      {
+        $lookup: {
+          from: "comments",
+          localField: "_id",
+          foreignField: "post_id",
+          as: "commented_by",
+        },
+      },
+      // Add likes count
+      {
+        $addFields: {
+          likes_count: {
+            $size: "$liked_by",
+          },
+          // Check if liked by user
+          is_liked: {
+            $cond: {
+              if: {
+                $in: [
+                  mongoose.Types.ObjectId(req.body.user_details._id),
+                  "$liked_by.user_id",
+                ],
+              },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      // Add comments count
+      {
+        $addFields: {
+          comments_count: {
+            $size: "$commented_by",
+          },
+        },
+      },
+      // remove unnecessary fields
+      { $project: { user_details: 0, __v: 0, liked_by: 0, commented_by: 0 } },
+    ]);
+
+    if (postDetail.length) return res.status(200).send(postDetail[0]);
+
+    return res.status(404).send(messages.postMissing);
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.post("/create-new-post", CheckAuthToken, async (req, res) => {
+// Delete a Post
+router.delete("/delete-post", UserAuth, async (req, res) => {
   try {
-    if (req.body?.File?.length && req.body?.FileType?.length) {
-      const newPost = new Posts({
-        UserID: req.body.CalledBy._id,
-        Username: req.body.CalledBy.Username,
-        Name: req.body.CalledBy.Name,
-        DateTime: moment(),
-        ProfilePicture: `${process.env.apiVersion}/auth/users/${req.body.CalledBy._id}`,
-        ...req.body,
-        Location: req.body.Location,
-        Caption: req.body.Caption,
-      });
+    const post = await posts.findOne({
+      _id: mongoose.Types.ObjectId(req.body._id),
+    });
+    if (!post) return res.status(404).send(messages.postMissing);
 
-      newPost.FileURL = `${process.env.apiVersion}/posts/file/${newPost._id}`;
-      newPost.PreviewURL = `${process.env.apiVersion}/posts/preview/${newPost._id}`;
+    // Check if user is the owner of the post
+    if (post.user_id.toString() !== req.body.user_details._id.toString())
+      return res.status(401).send(messages.postDeletionNotAllowed);
 
-      await newPost.save();
-      return res.status(200).send("Post Created");
-    }
-    return res.status(404).send(config.messages.fileMissing);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
+    // Delete from cloudinary
+    const userFolderDestination = `users/${req.body.user_details.Username}/Posts/${req.body._id}/`;
+    cloudinary.api.delete_resources_by_prefix(userFolderDestination);
 
-router.delete("/delete-post", CheckAuthToken, async (req, res) => {
-  try {
-    if (req.query?.PostID) {
-      const checkPost = await Posts.findOne({ _id: req.query.PostID });
-      if (checkPost.UserID.toString() === req.body.CalledBy._id.toString()) {
-        if (!checkPost) return res.status(404).send("Post Not Found");
+    // Delete the likes when this post gets deleted
+    await likes.deleteMany({ post_id: mongoose.Types.ObjectId(req.body._id) });
 
-        await Likes.deleteMany({ PostID: req.query.PostID });
-        await Comments.deleteMany({ PostID: req.query.PostID });
-        await Notifications.deleteMany({ PostID: req.query.PostID });
-
-        await checkPost.delete();
-
-        return res.status(200).send("Post Removed");
-      }
-      return res
-        .status(401)
-        .send("You are not the owner of post hence you cannot remove it.");
-    }
-    return res.status(404).send("Post Not Found");
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.get("/get-post-details", CheckAuthToken, async (req, res) => {
-  try {
-    const post = await Posts.findOne(
-      { _id: req.query.postID },
-      { File: 0, Preview: 0 }
-    );
-    if (!post) return res.status(404).send("Post Not Found");
-
-    let result = post.toObject();
-    result.LikedByUser = false;
-
-    const checkLikes = await Likes.findOne({
-      UserID: req.body.CalledBy._id,
-      PostID: req.query.postID,
+    // Delete the comments when this post gets deleted
+    await comments.deleteMany({
+      post_id: mongoose.Types.ObjectId(req.body._id),
     });
 
-    if (checkLikes) result.LikedByUser = true;
-
-    return res.send(result);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.get("/preview/:id", async (req, res) => {
-  try {
-    const post = await Posts.findById({ _id: req.params.id });
-
-    let toSendPicture = "";
-    if (post) {
-      toSendPicture = post.Preview;
-    } else {
-      toSendPicture = process.env.defaultProfileImage;
-    }
-
-    const ReplacedBASE = toSendPicture.replace(/^data:image\/\w+;base64,/, "");
-    const Preview = Buffer.from(ReplacedBASE, "base64");
-    res.writeHead(200, {
-      "Content-Type": "image/png",
-      "Content-Length": Preview.length,
+    // Delete all notifications when this post gets deleted
+    await notifications.deleteMany({
+      post_id: mongoose.Types.ObjectId(req.body._id),
     });
-    res.end(Preview);
+
+    // Delete the post
+    await posts.deleteOne({
+      _id: mongoose.Types.ObjectId(req.body._id),
+    });
+
+    return res.send(messages.postDeleted);
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.get("/file/:id", async (req, res) => {
-  try {
-    const post = await Posts.findById({ _id: req.params.id });
-
-    let toSendPicture = "";
-    if (post) {
-      toSendPicture = post.File;
-    } else {
-      toSendPicture = process.env.defaultProfileImage;
-    }
-
-    if (post.FileType === "image") {
-      const ReplacedBASE = toSendPicture.replace(
-        /^data:image\/\w+;base64,/,
-        ""
-      );
-      const File = Buffer.from(ReplacedBASE, "base64");
-      res.writeHead(200, {
-        "Content-Type": post.Mime,
-        "Content-Length": File.length,
-      });
-      res.end(File);
-    } else {
-      const ReplacedBASE = toSendPicture.replace(
-        /^data:video\/\w+;base64,/,
-        ""
-      );
-      const File = Buffer.from(ReplacedBASE, "base64");
-      res.writeHead(200, {
-        "Content-Type": post.Mime,
-        "Content-Length": File.length,
-      });
-      res.end(File);
-    }
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 

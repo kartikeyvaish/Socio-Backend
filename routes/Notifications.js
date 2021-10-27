@@ -1,51 +1,179 @@
+// package and other modules
 const express = require("express");
+
+// static imports
+const { AdminAuth, UserAuth } = require("../schemas/Auth");
+const { notifications } = require("../models/Notifications");
+const messages = require("../config/messages");
+const { requests } = require("../models/Requests");
+
+// Initialize router
 const router = express.Router();
 
-const config = require("../config/Configurations");
-
-const { Helper } = require("../config/Helper");
-const { Followers } = require("../models/Followers");
-const { Following } = require("../models/Following");
-const { Notifications } = require("../models/Notifications");
-const { Posts } = require("../models/Posts");
-const { Requests } = require("../models/Requests");
-const { Users } = require("../models/Users");
-
-const { CheckAuthToken, CheckAdminAccess } = Helper;
-
-router.get("/get-all-notifications", CheckAdminAccess, async (req, res) => {
+// Get List of all notifications in Database
+router.get("/get-all-notifications-list", AdminAuth, async (req, res) => {
   try {
-    const allNotif = await Notifications.find();
-    return res
-      .status(200)
-      .send({ NotificationsCount: allNotif.length, Notifications: allNotif });
+    const notificationsList = await notifications.find();
+
+    return res.status(200).send({ Notification: notificationsList });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.get(
-  "/get-all-notifications-for-user",
-  CheckAuthToken,
-  async (req, res) => {
-    try {
-      const allNotif = await Notifications.find({
-        UserID: req.body.CalledBy._id,
-      });
+// Get List of all notifications for a specific user
+router.get("/get-notifications-user", UserAuth, async (req, res) => {
+  try {
+    const notificationsList = await notifications.aggregate([
+      // mathcing the user_details._id with notify_to
+      {
+        $match: {
+          notify_to: req.body.user_details._id,
+        },
+      },
+      // Get the user details of the user who is sending the notification
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          // Get only id, username and Profile picture
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                Username: 1,
+                ProfilePicture: 1,
+              },
+            },
+          ],
+          as: "notified_by",
+        },
+      },
+      // Change notified_by to an object
+      {
+        $unwind: {
+          path: "$notified_by",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // Get Post Details
+      {
+        $lookup: {
+          from: "posts",
+          localField: "post_id",
+          foreignField: "_id",
+          // Get only preview_file and _id of post
+          pipeline: [
+            {
+              $project: {
+                preview_file: 1,
+                _id: 1,
+              },
+            },
+          ],
+          as: "post_details",
+        },
+      },
+      // If notification is a comment then include comment details
+      {
+        $lookup: {
+          from: "comments",
+          localField: "operation_type_id",
+          foreignField: "_id",
+          // Get only comment_text and _id of comment
+          pipeline: [
+            {
+              $project: {
+                comment_text: 1,
+                _id: 1,
+              },
+            },
+          ],
+          as: "comment_details",
+        },
+      },
+      // Change the comment_details to object
+      {
+        $unwind: {
+          path: "$comment_details",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // change post_details to an object
+      {
+        $unwind: {
+          path: "$post_details",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // Remove unneccesary fields
+      {
+        $project: {
+          post_id: 0,
+          notify_to: 0,
+          __v: 0,
+          operation_type_id: 0,
+        },
+      },
+    ]);
 
-      const allreq = await Requests.find({
-        "RequestedTo.UserID": req.body.CalledBy._id,
-      });
+    // Get count of follow request sent to user_details._id and also add a field for the first item in the array
+    const followRequests = await requests.aggregate([
+      // mathcing the user_details._id
+      {
+        $match: {
+          request_sent_to: req.body.user_details._id,
+        },
+        // Get the user details of the user
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          // Get only id, username and Profile picture
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                Username: 1,
+                ProfilePicture: 1,
+              },
+            },
+          ],
+          as: "user_details",
+        },
+      },
+      // Change user_details to an object
+      {
+        $unwind: {
+          path: "$user_details",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // Remove unneccesary fields
+      {
+        $project: {
+          user_id: 0,
+          request_sent_to: 0,
+          __v: 0,
+        },
+      },
+    ]);
 
-      return res.status(200).send({
-        NotificationsCount: allNotif.length,
-        Notifications: allNotif,
-        FollowRequests: allreq,
-      });
-    } catch (error) {
-      return res.status(500).send(config.messages.serverError);
-    }
+    return res.status(200).send({
+      Notifications: notificationsList,
+      FollowRequestsCount: followRequests.length,
+      PreviewRequestPicture:
+        followRequests.length > 0
+          ? followRequests[0].user_details.ProfilePicture
+          : null,
+    });
+  } catch (error) {
+    return res.status(500).send(messages.serverError);
   }
-);
+});
 
+// export router
 module.exports = router;

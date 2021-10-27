@@ -1,29 +1,15 @@
 const mongoose = require("mongoose");
 
-const Followers = mongoose.model(
-  "Followers",
+const followers = mongoose.model(
+  "followers",
   new mongoose.Schema({
-    UserID: {
-      type: String,
-      required: true,
-    },
-    Username: {
-      type: String,
-      required: true,
-    },
-    Name: {
-      type: String,
-      required: true,
-    },
-    ProfilePicture: {
-      type: String,
-      required: true,
-    },
-    FollowerOf: {
-      type: String,
+    user_id: { type: mongoose.Schema.ObjectId, ref: "users", required: true },
+    follower_id: {
+      type: mongoose.Schema.ObjectId,
+      ref: "users",
       required: true,
     },
   })
 );
 
-exports.Followers = Followers;
+exports.followers = followers;

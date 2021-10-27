@@ -1,34 +1,16 @@
 const mongoose = require("mongoose");
 const moment = require("moment");
 
-const Likes = mongoose.model(
-  "Likes",
+const likes = mongoose.model(
+  "likes",
   new mongoose.Schema({
-    UserID: {
-      type: String,
-      required: true,
-    },
-    Username: {
-      type: String,
-      required: true,
-    },
-    Name: {
-      type: String,
-      required: true,
-    },
-    ProfilePicture: {
-      type: String,
-      required: true,
-    },
-    PostID: {
-      type: String,
-      required: true,
-    },
-    DateTime: {
+    user_id: { type: mongoose.Schema.ObjectId, ref: "users", required: true },
+    post_id: { type: mongoose.Schema.ObjectId, ref: "posts", required: true },
+    liked_on: {
       type: Date,
       default: moment(),
     },
   })
 );
 
-exports.Likes = Likes;
+exports.likes = likes;

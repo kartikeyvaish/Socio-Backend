@@ -1,6 +1,6 @@
 const admin = require("firebase-admin");
 
-var serviceAccount = require("./SocioFirebaseSDK.json");
+let serviceAccount = require("../config/socio_firebasSDK.json");
 
 const Firebase = admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
