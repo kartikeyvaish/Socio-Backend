@@ -1,23 +1,21 @@
 const mongoose = require("mongoose");
 
-const Chats = mongoose.model(
-  "Chats",
+const chats = mongoose.model(
+  "chats",
   new mongoose.Schema({
-    UserOne: {
-      type: Object,
+    participants: {
+      type: [mongoose.Schema.ObjectId],
       required: true,
-      unique: true,
     },
-    UserTwo: {
-      type: Object,
+    present: {
+      type: [mongoose.Schema.ObjectId],
       required: true,
-      unique: true,
     },
-    LastMessageDetails: {
+    last_message_details: {
       type: Object,
-      default: {},
+      default: null,
     },
   })
 );
 
-exports.Chats = Chats;
+exports.chats = chats;

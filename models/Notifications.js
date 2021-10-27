@@ -1,62 +1,34 @@
 const mongoose = require("mongoose");
 const moment = require("moment");
 
-const NotificationTypes = [
-  {
-    name: "PostLiked",
-    navigateTo: "PostDetails",
-  },
-  {
-    name: "Commneted",
-    navigateTo: "Comments",
-  },
-];
-
-const Notifications = mongoose.model(
-  "Notifications",
+const notifications = mongoose.model(
+  "notifications",
   new mongoose.Schema({
-    UserID: {
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+    },
+    operation_type_id: {
+      type: mongoose.Schema.Types.ObjectId,
+    },
+    notification_type: {
       type: String,
-      required: true,
+      enum: ["like", "comment"],
+      default: "like",
     },
-    PrefixPicture: {
-      type: String,
-      required: true,
+    post_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "posts",
     },
-    SuffixPicture: {
-      type: String,
-      default: null,
+    notify_to: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
     },
-    content: {
-      type: String,
-      required: true,
-    },
-    notificationType: {
-      type: Object,
-      default: null,
-    },
-    DateTime: {
+    created_at: {
       type: Date,
       default: moment(),
-    },
-    OperationID: {
-      type: String,
-      required: true,
-    },
-    PostID: {
-      type: String,
-      required: true,
-    },
-    OperationType: {
-      type: String,
-      required: true,
-    },
-    OperationOwner: {
-      type: String,
-      required: true,
     },
   })
 );
 
-exports.Notifications = Notifications;
-exports.NotificationTypes = NotificationTypes;
+exports.notifications = notifications;

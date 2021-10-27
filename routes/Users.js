@@ -1,39 +1,130 @@
-const _ = require("lodash");
+// package and other modules
 const bcrypt = require("bcrypt");
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const router = express.Router();
+const multer = require("multer");
 const moment = require("moment");
 
-const config = require("../config/Configurations");
-const { Helper } = require("../config/Helper");
-const { CheckAdminAccess, CheckAuthToken } = Helper;
-const { Comments } = require("../models/Comments");
-const { Likes } = require("../models/Likes");
-const { Posts } = require("../models/Posts");
-const { Users, RegisterSchema, LoginSchema } = require("../models/Users");
+// static imports
+const messages = require("../config/messages");
+const { LoginSchema, AdminAuth, UserAuth } = require("../schemas/Auth");
 const { OTP } = require("../models/OTP");
-const { SendPushNotification } = require("../config/PushNotifications");
-const { random } = require("lodash");
-const { SendOTPEmail } = require("../config/Mailer");
+const { SendOTPEmail } = require("../utils/mailer");
+const { UploadToCloudinary } = require("../utils/cloudinary");
+const { users } = require("../models/Users");
+const { random, pick } = require("lodash");
+const { ValidateRegisterBody } = require("../schemas/Register");
 
-const TimeLimit = 10;
+// Initialize router
+const router = express.Router();
 
-router.get("/get-users-list", CheckAdminAccess, async (req, res) => {
+// Multer configuration
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Get List of all users in Database
+router.get("/get-all-users-list", AdminAuth, async (req, res) => {
   try {
-    const users = await Users.find({}, { Name: 1, Email: 1, Username: 1 });
-    return res.status(200).send({ UsersCount: users.length, Users: users });
+    const usersList = await users.find(
+      {},
+      { Name: 1, Email: 1, Username: 1, ProfilePicture: 1 }
+    );
+
+    return res.status(200).send({ Users: usersList });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
+// Search for users based on a query
+router.get("/search-users", UserAuth, async (req, res) => {
+  try {
+    const { search } = req.query;
+
+    const usersList = await users.find(
+      {
+        $or: [
+          { Name: { $regex: search, $options: "i" } },
+          { Username: { $regex: search, $options: "i" } },
+        ],
+      },
+      { Name: 1, Email: 1, Username: 1, ProfilePicture: 1 }
+    );
+
+    return res
+      .status(200)
+      .send({ Users: usersList, UsersCount: usersList.length });
+  } catch (error) {
+    return res.status(500).send(messages.serverError);
+  }
+});
+
+// Register endpoint
+router.post(
+  "/register",
+  upload.single("ProfilePicture"),
+  ValidateRegisterBody,
+  async (req, res) => {
+    try {
+      const checkEmail = await users.findOne({ Email: req.body.Email });
+      if (checkEmail) return res.status(403).send(messages.emailAlreadyInUse);
+
+      const checkUsername = await users.findOne({
+        Username: req.body.Username,
+      });
+      if (checkUsername)
+        return res.status(403).send(messages.UsernameAlreadyInUse);
+
+      let user = new users(req.body);
+      const destination = `users/${user._id}/ProfilePicture`;
+
+      if (req.body.ProfilePicture) {
+        const uploadResponse = await UploadToCloudinary(
+          req.body.ProfilePicture,
+          destination
+        );
+
+        if (uploadResponse?.url?.length)
+          user.ProfilePicture = uploadResponse.url;
+        else return res.status(500).send(messages.serverError);
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      user.Password = await bcrypt.hash(user.Password, salt);
+
+      const Token = jwt.sign(
+        {
+          _id: user._id,
+        },
+        process.env.JWT_Key
+      );
+
+      user.Token = Token;
+
+      await user.save();
+
+      const decodedUser = pick(user.toObject(), [
+        "Name",
+        "Email",
+        "Username",
+        "Token",
+        "_id",
+        "ProfilePicture",
+      ]);
+
+      return res.status(200).send({ User: decodedUser });
+    } catch (error) {
+      return res.status(500).send(messages.serverError);
+    }
+  }
+);
+
+// Login endpoint
 router.post("/login", async (req, res) => {
   try {
     const { error } = LoginSchema.validate(req.body);
     if (error) return res.status(401).send(error.details[0].message);
 
-    const user = await Users.findOne().or([
+    const user = await users.findOne().or([
       {
         Email: req.body.Email,
       },
@@ -41,157 +132,101 @@ router.post("/login", async (req, res) => {
         Username: req.body.Email,
       },
     ]);
-    if (!user) return res.status(404).send(config.messages.accountMissing);
+    if (!user) return res.status(404).send(messages.accountMissing);
 
     const CheckPassword = await bcrypt.compare(
       req.body.Password,
       user.Password
     );
     if (!CheckPassword)
-      return res.status(400).send(config.messages.invalidCredentials);
+      return res.status(400).send(messages.invalidCredentials);
 
-    const decodedUser = _.pick(user.toObject(), [
-      "Name",
-      "Username",
-      "Token",
-      "_id",
-      "RandomAPI",
-      "Email",
-      "Bio",
-    ]);
-
-    decodedUser.ProfilePicture = user.PicURL;
-
-    const StoreToken = jwt.sign(decodedUser, process.env.JWT_Key);
-
-    if (req.body.PushToken) {
-      user.PushToken = req.body.PushToken;
+    if (req.body.PushNotificationToken) {
+      user.PushNotificationToken = req.body.PushNotificationToken;
       await user.save();
     }
 
-    return res.status(200).send({ User: decodedUser, StoreToken: StoreToken });
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.post("/register", async (req, res) => {
-  try {
-    const { error } = RegisterSchema.validate(req.body);
-    if (error) return res.status(400).send(error.details[0].message);
-
-    const checkEmail = await Users.findOne({ Email: req.body.Email });
-    if (checkEmail)
-      return res.status(403).send(config.messages.emailAlreadyInUse);
-
-    const checkUsername = await Users.findOne({ Username: req.body.Username });
-    if (checkUsername)
-      return res.status(403).send(config.messages.UsernameAlreadyInUse);
-
-    let user = new Users({
-      Name: req.body.Name,
-      Email: req.body.Email,
-      Username: req.body.Username,
-      Password: req.body.Password,
-      Admin: req.body.Admin || false,
-      AccountVerified: false,
-      EmailVerified: req.body.EmailVerified || false,
-    });
-
-    if (req.body.ProfilePicture) {
-      if (req.body.ProfilePicture.length) {
-        user.ProfilePicture = req.body.ProfilePicture;
-      }
-    }
-
-    user.PicURL = `${process.env.apiVersion}/auth/users/${user._id}`;
-
-    const salt = await bcrypt.genSalt(10);
-    user.Password = await bcrypt.hash(user.Password, salt);
-
-    const Token = jwt.sign(
-      {
-        _id: user._id,
-      },
-      process.env.JWT_Key
-    );
-
-    user.Token = Token;
-
-    if (req.body.PushToken) {
-      user.PushToken = req.body.PushToken;
-      const newNotification = {
-        body: `Hey ${req.body.Name}, Welcome to Socio.`,
-        title: "Socio",
-      };
-      await SendPushNotification({
-        PushToken: req.body.PushToken,
-        Data: {},
-        notification: newNotification,
-      });
-    }
-
-    await user.save();
-
-    const decodedUser = _.pick(user.toObject(), [
+    const decodedUser = pick(user.toObject(), [
       "Name",
-      "Email",
       "Username",
       "Token",
       "_id",
+      "Email",
+      "Bio",
+      "ProfilePicture",
     ]);
 
-    decodedUser.ProfilePicture = user.PicURL;
-
-    const StoreToken = jwt.sign(decodedUser, process.env.JWT_Key);
-
-    return res.status(200).send({ User: decodedUser, StoreToken: StoreToken });
+    return res.status(200).send({ User: decodedUser });
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.delete("/logout", CheckAuthToken, async (req, res) => {
+// Logout endpoint
+router.delete("/logout", UserAuth, async (req, res) => {
   try {
-    const user = await Users.findOne({ _id: req.body.CalledBy._id });
-    if (!user) return res.status(404).send(config.messages.accountMissing);
+    const user = await users.findOne({ _id: req.body.user_details._id });
+    if (!user) return res.status(404).send(messages.accountMissing);
 
-    user.PushToken = "";
+    user.PushNotificationToken = "";
     await user.save();
 
-    return res.send("You are now logged out");
+    return res.send(messages.loggedtOut);
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.get("/email-register", async (req, res) => {
+// Change Password endpoint
+router.put("/change-password", UserAuth, async (req, res) => {
   try {
-    if (req.query?.email) {
-      const user = await Users.findOne({ Email: req.query.email });
+    let user = await users.findOne({ _id: req.body.user_details._id });
+    if (!user) return res.status(404).send(messages.accountMissing);
+
+    const CheckPassword = await bcrypt.compare(
+      req.body.CurrentPassword,
+      user.Password
+    );
+
+    if (!CheckPassword)
+      return res.status(400).send(messages.currentPasswordError);
+
+    const salt = await bcrypt.genSalt(10);
+    user.Password = await bcrypt.hash(req.body.NewPassword, salt);
+    await user.save();
+
+    return res.status(200).send(messages.passwordChanged);
+  } catch (error) {
+    return res.status(500).send(messages.serverError);
+  }
+});
+
+// Send Email Register First OTP endpoint
+router.post("/send-email-register-otp", async (req, res) => {
+  try {
+    if (req.body?.Email) {
+      const user = await users.findOne({ Email: req.body.Email });
       if (user)
         return res.status(401).send({
-          response: `${config.messages.accountMissing}. Proceed to Login`,
+          response: messages.associatedAccount,
         });
 
       const createdAt = moment();
-      const validTill = moment(createdAt).add(TimeLimit, "minutes");
       const OTP_Random = random(100000, 999999);
 
       const newOtp = new OTP({
         Verification: {
           Type: "Email",
-          Email: req.query.email,
+          Email: req.body.Email,
         },
         CreatedAt: createdAt,
-        ValidTill: validTill,
         OTP: OTP_Random,
       });
 
       await newOtp.save();
 
       const sendMail = await SendOTPEmail({
-        to: req.query.email,
+        to: req.body.Email,
         subject: "Email Verification",
         locals: {
           OTP: OTP_Random,
@@ -200,52 +235,51 @@ router.get("/email-register", async (req, res) => {
 
       if (sendMail.ok) {
         return res.status(200).send({
-          response: _.pick(newOtp.toObject(), ["_id"]),
+          response: pick(newOtp.toObject(), ["_id"]),
         });
       } else {
         return res.status(500).send({
-          response: config.messages.serverError,
+          response: messages.serverError,
         });
       }
     } else {
       return res.status(404).send({
-        response: `Email ID is required`,
+        response: messages.emailRequired,
       });
     }
   } catch (error) {
     return res.status(500).send({
-      response: config.messages.serverError,
+      response: messages.serverError,
     });
   }
 });
 
-router.post("/forgot-otp-check-email", async (req, res) => {
+// Send Forgot Password OTP Endpoint
+router.post("/send-forgot-password-otp", async (req, res) => {
   try {
-    if (req.body?.email) {
-      const user = await Users.findOne({ Email: req.body.email });
+    if (req.body?.Email) {
+      const user = await users.findOne({ Email: req.body.Email });
       if (!user)
         return res.status(401).send({
-          response: `Account. With this email not found`,
+          response: messages.accountMissing,
         });
 
       const createdAt = moment();
-      const validTill = moment(createdAt).add(TimeLimit, "minutes");
       const OTP_Random = random(100000, 999999);
 
       const newOtp = new OTP({
         Verification: {
           Type: "ForgotPassword",
-          Email: req.body.email,
+          Email: req.body.Email,
         },
         CreatedAt: createdAt,
-        ValidTill: validTill,
         OTP: OTP_Random,
       });
 
       await newOtp.save();
 
       const sendMail = await SendOTPEmail({
-        to: req.body.email,
+        to: req.body.Email,
         subject: "Forgot Password OTP",
         locals: {
           OTP: OTP_Random,
@@ -254,146 +288,61 @@ router.post("/forgot-otp-check-email", async (req, res) => {
 
       if (sendMail.ok) {
         return res.status(200).send({
-          response: _.pick(newOtp.toObject(), ["_id"]),
+          response: pick(newOtp.toObject(), ["_id"]),
         });
       } else {
         return res.status(500).send({
-          response: config.messages.serverError,
+          response: messages.serverError,
         });
       }
     } else {
       return res.status(404).send({
-        response: `Email ID is required`,
+        response: messages.emailRequired,
       });
     }
   } catch (error) {
     return res.status(500).send({
-      response: config.messages.serverError,
+      response: messages.serverError,
     });
   }
 });
 
-router.get("/search-users", CheckAuthToken, async (req, res) => {
-  try {
-    let search = req.query.search;
-    let UsernameFilter = search.split(" ").map((s) => {
-      return {
-        Username: {
-          $regex: s,
-          $options: "i",
-        },
-      };
-    });
-
-    let NameFilter = search.split(" ").map((s) => {
-      return {
-        Name: {
-          $regex: s,
-          $options: "i",
-        },
-      };
-    });
-
-    const searchUsers = await Users.find(
-      {
-        $or: [...UsernameFilter, ...NameFilter],
-      },
-      { Name: 1, Username: 1 }
-    );
-
-    res.send({ SearchCount: searchUsers.length, Results: searchUsers });
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
-router.put("/change-password", CheckAuthToken, async (req, res) => {
-  try {
-    let user = await Users.findOne({ _id: req.body.CalledBy._id });
-    if (!user) return res.status(404).send(config.messages.accountMissing);
-
-    const CheckPassword = await bcrypt.compare(
-      req.body.CurrentPassword,
-      user.Password
-    );
-    if (!CheckPassword)
-      return res.status(400).send(config.messages.currentPasswordError);
-
-    const salt = await bcrypt.genSalt(10);
-    user.Password = await bcrypt.hash(req.body.NewPassword, salt);
-    await user.save();
-    return res.status(200).send(config.messages.passwordChanged);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
+// Reset Password endpoint
 router.post("/reset-password", async (req, res) => {
   try {
-    console.log(req.body);
-    let user = await Users.findOne({ Email: req.body.Email });
-    if (!user) return res.status(404).send(config.messages.accountMissing);
+    let user = await users.findOne({ Email: req.body.Email });
+    if (!user) return res.status(404).send(messages.accountMissing);
+
+    // check if OTP_ID is provided
+    if (!req.body.OTP_ID) return res.status(400).send("OTP ID is required");
+
+    // Check if the OTP_ID exists in OTP collection or not.
+    const OTP_Exists = await OTP.findById(req.body.OTP_ID);
+    if (!OTP_Exists) return res.status(404).send("Invalid OTP");
 
     const salt = await bcrypt.genSalt(10);
-
     user.Password = await bcrypt.hash(req.body.Password, salt);
     await user.save();
-    return res.status(200).send(config.messages.passwordChanged);
+
+    return res.status(200).send(messages.passwordChanged);
   } catch (error) {
-    console.log(error);
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.delete("/delete-account", CheckAuthToken, async (req, res) => {
+// Delete Account Endpoint
+router.delete("/delete-account", UserAuth, async (req, res) => {
   try {
-    await Posts.deleteMany({
-      UserID: req.body.CalledBy._id,
-    });
-
-    await Likes.deleteMany({
-      UserID: req.body.CalledBy._id,
-    });
-
-    await Comments.deleteMany({
-      UserID: req.body.CalledBy._id,
-    });
-
-    const user = await Users.findOne({
-      _id: req.body.CalledBy._id,
+    const user = await users.findOne({
+      _id: req.body.user_details._id,
     });
 
     await user.delete();
-    return res.send(config.messages.accountDeleted);
+    return res.send(messages.accountDeleted);
   } catch (error) {
-    return res.status(500).send(config.messages.serverError);
+    return res.status(500).send(messages.serverError);
   }
 });
 
-router.get("/users/:id*", async (req, res) => {
-  try {
-    const user = await Users.findById({ _id: req.params.id });
-    let toSendPicture = "";
-    if (user) {
-      if (user.ProfilePicture === "/uploads/DefaultImage.png") {
-        toSendPicture = process.env.defaultProfileImage;
-      } else {
-        toSendPicture = user.ProfilePicture;
-      }
-    } else {
-      toSendPicture = process.env.defaultProfileImage;
-    }
-
-    const ReplacedBASE = toSendPicture.replace(/^data:image\/\w+;base64,/, "");
-    const ProfilePicture = Buffer.from(ReplacedBASE, "base64");
-    res.writeHead(200, {
-      "Content-Type": "image/png",
-      "Content-Length": ProfilePicture.length,
-    });
-    res.end(ProfilePicture);
-  } catch (error) {
-    return res.status(500).send(config.messages.serverError);
-  }
-});
-
+// export router
 module.exports = router;

@@ -1,7 +1,7 @@
 const Email = require("email-templates");
 const nodemailer = require("nodemailer");
 
-const config = require("../config/Configurations");
+const messages = require("../config/messages");
 
 let transporter = nodemailer.createTransport({
   service: "gmail",
@@ -31,7 +31,7 @@ async function SendOTPEmail({ to = "", subject = "", locals = {} }) {
 
     return { response: "Email Sent Successfully", ok: true, data: response };
   } catch (error) {
-    return { response: config.messages.serverError, ok: false };
+    return { response: messages.serverError, ok: false };
   }
 }
 

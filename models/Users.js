@@ -1,20 +1,7 @@
 const mongoose = require("mongoose");
-const Joi = require("joi");
 
-const RegisterSchema = Joi.object({
-  Name: Joi.string().required(),
-  Email: Joi.string().email().required(),
-  Username: Joi.string().required(),
-  Password: Joi.string().min(3).max(15).required(),
-}).options({ allowUnknown: true });
-
-const LoginSchema = Joi.object({
-  Email: Joi.string().required(),
-  Password: Joi.string().required(),
-}).options({ allowUnknown: true });
-
-const Users = mongoose.model(
-  "Users",
+const users = mongoose.model(
+  "users",
   new mongoose.Schema({
     Name: {
       type: String,
@@ -32,13 +19,13 @@ const Users = mongoose.model(
     },
     ProfilePicture: {
       type: String,
-      default: "/uploads/DefaultImage.png",
+      default: process.env.default_profile_picture || "",
     },
-    PicURL: {
+    Token: {
       type: String,
       default: "",
     },
-    PushToken: {
+    PushNotificationToken: {
       type: String,
       default: "",
     },
@@ -46,19 +33,15 @@ const Users = mongoose.model(
       type: String,
       required: true,
     },
-    Token: {
-      type: String,
-      default: "",
-    },
     Bio: {
       type: String,
       default: "",
     },
-    AccountVerified: {
+    EmailVerified: {
       type: Boolean,
       default: false,
     },
-    EmailVerified: {
+    AccountVerified: {
       type: Boolean,
       default: false,
     },
@@ -73,6 +56,4 @@ const Users = mongoose.model(
   })
 );
 
-exports.Users = Users;
-exports.RegisterSchema = RegisterSchema;
-exports.LoginSchema = LoginSchema;
+exports.users = users;

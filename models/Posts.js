@@ -1,77 +1,41 @@
 const mongoose = require("mongoose");
 
-const Posts = mongoose.model(
-  "Posts",
+const posts = mongoose.model(
+  "posts",
   new mongoose.Schema({
-    UserID: {
-      type: String,
-      required: true,
-    },
-    Username: {
-      type: String,
-      required: true,
-    },
-    Name: {
-      type: String,
-      required: true,
-    },
-    Location: {
+    user_id: { type: mongoose.Schema.ObjectId, ref: "users" },
+    location: {
       type: String,
       default: "",
     },
-    Caption: {
+    caption: {
       type: String,
       default: "",
     },
-    File: {
+    file: {
       type: String,
       required: true,
     },
-    FileURL: {
-      type: String,
-      required: true,
-    },
-    Preview: {
+    preview_file: {
       type: String,
       default: "",
     },
-    Width: {
-      type: Number,
-      default: 0,
+    dimensions: {
+      type: Object,
+      default: {
+        width: 0,
+        height: 0,
+      },
     },
-    Height: {
-      type: Number,
-      default: 0,
-    },
-    PreviewURL: {
+    mime_type: {
       type: String,
       default: "",
     },
-    ProfilePicture: {
-      type: String,
-      default: "",
-    },
-    FileType: {
-      type: String,
-      required: true,
-    },
-    Likes: {
-      type: Number,
-      default: 0,
-    },
-    Comments: {
-      type: Number,
-      default: 0,
-    },
-    Mime: {
-      type: String,
-      default: "",
-    },
-    DateTime: {
+    posted_on: {
       type: Date,
       default: new Date(),
     },
   })
 );
 
-exports.Posts = Posts;
+exports.posts = posts;
