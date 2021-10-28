@@ -29,7 +29,7 @@ router.get("/get-all-users-list", AdminAuth, async (req, res) => {
       { Name: 1, Email: 1, Username: 1, ProfilePicture: 1 }
     );
 
-    return res.status(200).send({ Users: usersList });
+    return res.status(200).send({ UsersList: usersList });
   } catch (error) {
     return res.status(500).send(messages.serverError);
   }
