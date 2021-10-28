@@ -1,9 +1,11 @@
 const admin = require("firebase-admin");
 
-let serviceAccount = require("../config/socio_firebasSDK.json");
-
 const Firebase = admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: cert({
+    projectId: process.env.project_id,
+    clientEmail: process.env.clientEmail,
+    privateKey: procesas.env.privateKey,
+  }),
 });
 
 module.exports = Firebase;
