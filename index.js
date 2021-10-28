@@ -22,7 +22,7 @@ const {
 const Chats = require("./routes/Chats");
 const Comments = require("./routes/Comments");
 const Likes = require("./routes/Likes");
-const Notifications = require("./routes/notifications");
+const Notifications = require("./routes/Notifications");
 const OTP = require("./routes/OTP");
 const People = require("./routes/People");
 const Posts = require("./routes/Posts");
