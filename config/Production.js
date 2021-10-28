@@ -1,11 +1,11 @@
-const Morgan = require("morgan"); // Delete this line while deployement
+const Morgan = require("morgan");
 const helmet = require("helmet");
 const compression = require("compression");
 const cors = require("cors");
 const express = require("express");
 
 module.exports = function (app) {
-  app.use(Morgan("dev")); // Delete this line while deployement
+  if (process.env.NODE_ENV === "development") app.use(Morgan("dev"));
   app.use(helmet());
   app.use(compression());
   app.use(express.json({ limit: "50mb" }));

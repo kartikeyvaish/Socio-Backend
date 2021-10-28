@@ -95,4 +95,8 @@ app.use(process.env.apiVersion + process.env.profile, Profile);
 app.use(process.env.apiVersion + process.env.auth, User);
 
 // Server listening on port
-server.listen(config.Port, () => console.log(`Listening on ${config.Port}..`));
+server.listen(config.Port, () =>
+  console.log(
+    `Mode = ${process.env.NODE_ENV} and Listening on ${config.Port}..`
+  )
+);

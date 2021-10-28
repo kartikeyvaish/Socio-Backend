@@ -74,7 +74,12 @@ router.post(
       if (checkUsername)
         return res.status(403).send(messages.UsernameAlreadyInUse);
 
-      let user = new users(req.body);
+      let user = new users({
+        Name: req.body.Name,
+        Email: req.body.Email,
+        Username: req.body.Username,
+        Password: req.body.Password,
+      });
       const destination = `users/${user._id}/ProfilePicture`;
 
       if (req.body.ProfilePicture) {
