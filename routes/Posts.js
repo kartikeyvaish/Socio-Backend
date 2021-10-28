@@ -112,38 +112,35 @@ router.get("/get-feed-for-user", UserAuth, async (req, res) => {
           },
         },
       },
-      // Lookup likes and its details
+      // Count number of likes for each post
       {
         $lookup: {
           from: "likes",
           localField: "_id",
           foreignField: "post_id",
-          pipeline: [{ $project: { user_id: 1 } }],
-          as: "liked_by",
+          as: "likes_count",
         },
       },
-      // Lookup comments and its details
+      // Count number of comments for each post
       {
         $lookup: {
           from: "comments",
           localField: "_id",
           foreignField: "post_id",
-          as: "commented_by",
+          as: "comments_count",
         },
       },
-      // Add likes count
+      // Check if the user has liked the post
       {
         $addFields: {
-          likes_count: {
-            $size: "$liked_by",
-          },
-          // Check if liked by user
           is_liked: {
             $cond: {
               if: {
-                $in: [
-                  mongoose.Types.ObjectId(req.body.user_details._id),
-                  "$liked_by.user_id",
+                $eq: [
+                  {
+                    $arrayElemAt: ["$likes_count.user_id", 0],
+                  },
+                  req.body.user_details._id,
                 ],
               },
               then: true,
@@ -152,22 +149,35 @@ router.get("/get-feed-for-user", UserAuth, async (req, res) => {
           },
         },
       },
-      // Add comments count
+      // Change likes_count array to the number of likes
       {
         $addFields: {
-          comments_count: {
-            $size: "$commented_by",
+          likes_count: {
+            $size: "$likes_count",
           },
         },
       },
-      // remove unnecessary fields
-      { $project: { user_details: 0, __v: 0, liked_by: 0, commented_by: 0 } },
+      // Change comments_count array to the number of comments
+      {
+        $addFields: {
+          comments_count: {
+            $size: "$comments_count",
+          },
+        },
+      },
+      // Remove the user_details field
+      {
+        $project: {
+          user_details: 0,
+        },
+      },
     ]);
 
     return res
       .status(200)
       .send({ PostsCount: feedPosts.length, Posts: feedPosts });
   } catch (error) {
+    console.log(error);
     return res.status(500).send(messages.serverError);
   }
 });
@@ -360,38 +370,35 @@ router.get("/get-post-detail", UserAuth, async (req, res) => {
           },
         },
       },
-      // Lookup likes and its details
+      // Count number of likes for each post
       {
         $lookup: {
           from: "likes",
           localField: "_id",
           foreignField: "post_id",
-          pipeline: [{ $project: { user_id: 1 } }],
-          as: "liked_by",
+          as: "likes_count",
         },
       },
-      // Lookup comments and its details
+      // Count number of comments for each post
       {
         $lookup: {
           from: "comments",
           localField: "_id",
           foreignField: "post_id",
-          as: "commented_by",
+          as: "comments_count",
         },
       },
-      // Add likes count
+      // Check if the user has liked the post
       {
         $addFields: {
-          likes_count: {
-            $size: "$liked_by",
-          },
-          // Check if liked by user
           is_liked: {
             $cond: {
               if: {
-                $in: [
-                  mongoose.Types.ObjectId(req.body.user_details._id),
-                  "$liked_by.user_id",
+                $eq: [
+                  {
+                    $arrayElemAt: ["$likes_count.user_id", 0],
+                  },
+                  req.body.user_details._id,
                 ],
               },
               then: true,
@@ -400,16 +407,28 @@ router.get("/get-post-detail", UserAuth, async (req, res) => {
           },
         },
       },
-      // Add comments count
+      // Change likes_count array to the number of likes
       {
         $addFields: {
-          comments_count: {
-            $size: "$commented_by",
+          likes_count: {
+            $size: "$likes_count",
           },
         },
       },
-      // remove unnecessary fields
-      { $project: { user_details: 0, __v: 0, liked_by: 0, commented_by: 0 } },
+      // Change comments_count array to the number of comments
+      {
+        $addFields: {
+          comments_count: {
+            $size: "$comments_count",
+          },
+        },
+      },
+      // Remove the user_details field
+      {
+        $project: {
+          user_details: 0,
+        },
+      },
     ]);
 
     if (postDetail.length) return res.status(200).send(postDetail[0]);
