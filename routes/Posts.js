@@ -227,8 +227,15 @@ router.post(
           newPost.preview_file = previewUploadResponse.url;
         else return res.status(500).send(messages.serverError);
 
+        const responseData = newPost.toObject();
+        responseData.is_liked = false;
+        responseData.comments_count = 0;
+        responseData.likes_count = 0;
+        responseData.Username = req.body.user_details.Username;
+        responseData.ProfilePicture = req.body.user_details.ProfilePicture;
+
         await newPost.save();
-        return res.status(200).send(newPost);
+        return res.status(200).send(responseData);
       }
 
       return res.status(404).send(messages.fileMissing);
