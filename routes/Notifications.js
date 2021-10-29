@@ -37,16 +37,6 @@ router.get("/get-notifications-user", UserAuth, async (req, res) => {
           from: "users",
           localField: "user_id",
           foreignField: "_id",
-          // Get only id, username and Profile picture
-          pipeline: [
-            {
-              $project: {
-                _id: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "notified_by",
         },
       },
@@ -64,14 +54,6 @@ router.get("/get-notifications-user", UserAuth, async (req, res) => {
           localField: "post_id",
           foreignField: "_id",
           // Get only preview_file and _id of post
-          pipeline: [
-            {
-              $project: {
-                preview_file: 1,
-                _id: 1,
-              },
-            },
-          ],
           as: "post_details",
         },
       },
@@ -82,14 +64,6 @@ router.get("/get-notifications-user", UserAuth, async (req, res) => {
           localField: "operation_type_id",
           foreignField: "_id",
           // Get only comment_text and _id of comment
-          pipeline: [
-            {
-              $project: {
-                comment_text: 1,
-                _id: 1,
-              },
-            },
-          ],
           as: "comment_details",
         },
       },
@@ -132,16 +106,6 @@ router.get("/get-notifications-user", UserAuth, async (req, res) => {
           from: "users",
           localField: "user_id",
           foreignField: "_id",
-          // Get only id, username and Profile picture
-          pipeline: [
-            {
-              $project: {
-                _id: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "user_details",
         },
       },
