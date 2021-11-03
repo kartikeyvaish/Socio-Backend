@@ -129,16 +129,6 @@ router.get("/get-chats-for-user", UserAuth, async (req, res) => {
           from: "users",
           localField: "other_user",
           foreignField: "_id",
-          pipeline: [
-            {
-              $project: {
-                _id: 1,
-                Name: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "chatting_with",
         },
       },
@@ -149,13 +139,16 @@ router.get("/get-chats-for-user", UserAuth, async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-      // Remove unnecessary fields
+      // Remove unnecessary fields from chatting_with object
       {
         $project: {
-          participants: 0,
-          present: 0,
-          other_user: 0,
-          __v: 0,
+          _id: 1,
+          last_message_details: 1,
+          chatting_with: {
+            _id: "$chatting_with._id",
+            Username: "$chatting_with.Username",
+            ProfilePicture: "$chatting_with.ProfilePicture",
+          },
         },
       },
     ]);
@@ -269,14 +262,6 @@ router.get("/get-messages", UserAuth, async (req, res) => {
     const chatRoom = await chats.findOne({ _id: req.query.room_id });
     if (!chatRoom) return res.status(400).send(MESSAGES.chatMissing);
 
-    // const messages_list = await messages
-    //   .find({
-    //     room_id: mongoose.Types.ObjectId(req.query.room_id),
-    //   })
-    //   .sort({ _id: -1 })
-    //   .skip(parseInt(req.query.skip))
-    //   .limit(parseInt(req.query.limit || 10));
-
     // Write the same query using aggregation pipeline
     const messages_list = await messages.aggregate([
       {
@@ -292,63 +277,6 @@ router.get("/get-messages", UserAuth, async (req, res) => {
       },
       {
         $limit: parseInt(req.query.limit || 10),
-      },
-      // if message_type is post, then include post_details field in the response
-      {
-        $lookup: {
-          from: "posts",
-          localField: "post_id",
-          foreignField: "_id",
-          pipeline: [
-            {
-              $project: {
-                caption: 1,
-                preview_file: 1,
-                user_id: 1,
-              },
-            },
-          ],
-          as: "post_details",
-        },
-      },
-      // Change post_details array to an object
-      {
-        $unwind: {
-          path: "$post_details",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Add Name, Username and ProfilePicture fields to the post_details object
-      {
-        $lookup: {
-          from: "users",
-          localField: "post_details.user_id",
-          foreignField: "_id",
-          pipeline: [
-            {
-              $project: {
-                Name: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
-          as: "post_details.user_details",
-        },
-      },
-      // Change post_details.user_details array to an object
-      {
-        $unwind: {
-          path: "$post_details.user_details",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Remove unnecessary fields
-      {
-        $project: {
-          room_id: 0,
-          __v: 0,
-        },
       },
     ]);
 
