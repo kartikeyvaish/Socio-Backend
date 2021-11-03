@@ -412,16 +412,6 @@ router.get("/get-followers-list", UserAuth, async (req, res) => {
           from: "users",
           localField: "follower_id",
           foreignField: "_id",
-          // Get only Name, Username and ProfilePicture
-          pipeline: [
-            {
-              $project: {
-                Name: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "user_details",
         },
       },
@@ -435,9 +425,13 @@ router.get("/get-followers-list", UserAuth, async (req, res) => {
       // Remove unnecessary fields
       {
         $project: {
-          user_id: 0,
-          follower_id: 0,
-          __v: 0,
+          _id: 1,
+          user_details: {
+            _id: 1,
+            Name: 1,
+            Username: 1,
+            ProfilePicture: 1,
+          },
         },
       },
     ]);
@@ -466,16 +460,6 @@ router.get("/get-following-list", UserAuth, async (req, res) => {
           from: "users",
           localField: "following_id",
           foreignField: "_id",
-          // Get only Name, Username and ProfilePicture
-          pipeline: [
-            {
-              $project: {
-                Name: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "user_details",
         },
       },
@@ -489,9 +473,13 @@ router.get("/get-following-list", UserAuth, async (req, res) => {
       // Remove unnecessary fields
       {
         $project: {
-          user_id: 0,
-          following_id: 0,
-          __v: 0,
+          _id: 1,
+          user_details: {
+            _id: 1,
+            Name: 1,
+            Username: 1,
+            ProfilePicture: 1,
+          },
         },
       },
     ]);
