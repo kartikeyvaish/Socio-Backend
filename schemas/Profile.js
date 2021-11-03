@@ -4,7 +4,7 @@ const Joi = require("joi");
 const EditProfileSchema = Joi.object({
   Name: Joi.string(),
   Username: Joi.string(),
-  Bio: Joi.string(),
+  Bio: Joi.string().allow(""),
 }).options({ allowUnknown: true });
 
 // Function to validate a file and body of a request
