@@ -194,6 +194,13 @@ router.post(
         req.files?.file?.length &&
         req.files?.preview_file?.length
       ) {
+        // Send error if file size is greater than 10mb
+        if (req.files.file[0].size > 10485760)
+          return res.status(400).send(messages.fileSizeError);
+
+        if (req.files.preview_file[0].size > 10485760)
+          return res.status(400).send(messages.fileSizeError);
+
         const newPost = new posts({
           user_id: req.body.user_details._id,
           posted_on: moment(),
