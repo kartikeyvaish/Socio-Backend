@@ -128,6 +128,12 @@ router.get("/get-profile", UserAuth, async (req, res) => {
             user_id: mongoose.Types.ObjectId(target_user_id),
           },
         },
+        // Sort by posted_on
+        {
+          $sort: {
+            posted_on: -1,
+          },
+        },
         // Lookup for user_details of the post
         {
           $lookup: {
