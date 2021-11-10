@@ -31,6 +31,7 @@ const messages = {
   postUpdated: "Post Updated Successfully",
   postDeleted: "Post Deleted Successfully",
   postDeletionNotAllowed: "You are not authorized to perform this operation",
+  fileSizeError: "File Limit Exceeded",
 
   // COMMENT
   commentedSuccess: "Commented Successfully",
