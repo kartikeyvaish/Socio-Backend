@@ -14,6 +14,7 @@ const { UploadToCloudinary } = require("../utils/cloudinary");
 const { users } = require("../models/Users");
 const { random, pick } = require("lodash");
 const { ValidateRegisterBody } = require("../schemas/Register");
+const { VerifyTokenID } = require("../utils/googleSignIn");
 
 // Initialize router
 const router = express.Router();
@@ -164,6 +165,36 @@ router.post("/login", async (req, res) => {
     return res.status(200).send({ User: decodedUser });
   } catch (error) {
     return res.status(500).send(messages.serverError);
+  }
+});
+
+// Login with Google
+router.post("/google-login", async (req, res) => {
+  try {
+    const verifyResponse = await VerifyTokenID(req.body.Token);
+    const email = verifyResponse.getPayload().email;
+
+    if (!email) return res.status(404).send(messages.accountMissing);
+
+    const user = await users.findOne({
+      Email: email,
+    });
+    if (!user) return res.status(404).send(messages.accountMissing);
+
+    const decodedUser = pick(user.toObject(), [
+      "Name",
+      "Username",
+      "Token",
+      "_id",
+      "Email",
+      "Bio",
+      "ProfilePicture",
+    ]);
+
+    return res.status(200).send({ User: decodedUser });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).send("Error");
   }
 });
 
