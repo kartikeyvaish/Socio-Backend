@@ -42,16 +42,6 @@ router.get("/get-all-comments-of-post", UserAuth, async (req, res) => {
             from: "users",
             localField: "user_id",
             foreignField: "_id",
-            // include only username and prrofile picture
-            pipeline: [
-              {
-                $project: {
-                  Name: 1,
-                  Username: 1,
-                  ProfilePicture: 1,
-                },
-              },
-            ],
             as: "user_details",
           },
         },
@@ -62,12 +52,16 @@ router.get("/get-all-comments-of-post", UserAuth, async (req, res) => {
             },
           },
         },
-        // Remove fields not required
+        // Keep fields only required
         {
           $project: {
-            post_id: 0,
-            __v: 0,
-            user_details: 0,
+            _id: 1,
+            Name: 1,
+            Username: 1,
+            ProfilePicture: 1,
+            user_id: 1,
+            comment_text: 1,
+            commented_on: 1,
           },
         },
       ]);
