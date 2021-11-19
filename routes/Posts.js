@@ -294,7 +294,6 @@ router.get("/get-posts-by-user", UserAuth, async (req, res) => {
           from: "likes",
           localField: "_id",
           foreignField: "post_id",
-          pipeline: [{ $project: { user_id: 1 } }],
           as: "liked_by",
         },
       },
@@ -342,6 +341,7 @@ router.get("/get-posts-by-user", UserAuth, async (req, res) => {
 
     return res.status(200).send({ Posts: allPosts });
   } catch (error) {
+    console.log(error);
     return res.status(500).send(messages.serverError);
   }
 });
