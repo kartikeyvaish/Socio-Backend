@@ -214,7 +214,7 @@ router.post(
           ...req.body,
         });
 
-        const destination = `users/${req.body.user_details._id}/Posts/${newPost._id}/`;
+        const destination = `Socio/users/${req.body.user_details._id}/Posts/${newPost._id}/`;
 
         const fileUploadResponse = await UploadToCloudinary(
           req.files?.file?.[0].buffer,

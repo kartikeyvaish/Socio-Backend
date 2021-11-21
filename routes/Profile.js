@@ -240,7 +240,7 @@ router.patch(
       // Update Profile Picture if provided
       if (req.body.ProfilePicture) {
         // Upload to cloudinary first
-        const destination = `users/${user._id}/ProfilePicture`;
+        const destination = `Socio/users/${user._id}/ProfilePicture`;
 
         const uploadResponse = await UploadToCloudinary(
           req.body.ProfilePicture,

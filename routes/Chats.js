@@ -222,7 +222,7 @@ router.post(
 
       // If the message is a file, then save the file in the server and save the file name in the message
       if (req.body.message_type === "file") {
-        const destination = `chats/${req.body.room_id}/`;
+        const destination = `Socio/chats/${req.body.room_id}/`;
         const fileUploadResponse = await UploadToCloudinary(
           req.body.file,
           destination

@@ -80,8 +80,13 @@ router.post(
         Email: req.body.Email,
         Username: req.body.Username,
         Password: req.body.Password,
+        EmailVerified: true,
       });
-      const destination = `users/${user._id}/ProfilePicture`;
+      const destination = `Socio/users/${user._id}/ProfilePicture`;
+
+      if (req.body.PushToken) {
+        user.PushNotificationToken = req.body.PushToken;
+      }
 
       if (req.body.ProfilePicture) {
         const uploadResponse = await UploadToCloudinary(
