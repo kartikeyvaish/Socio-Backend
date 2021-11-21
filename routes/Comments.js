@@ -94,17 +94,20 @@ router.post("/post-comment", UserAuth, async (req, res) => {
 
     await newComment.save();
 
-    // Create a Notification for Comment
-    const newNotification = new notifications({
-      user_id: req.body.user_details._id,
-      notification_type: "comment",
-      post_id: mongoose.Types.ObjectId(req.body.post_id),
-      notify_to: checkPost.user_id,
-      operation_type_id: mongoose.Types.ObjectId(newComment._id),
-      created_at: moment(),
-    });
+    // Don't create notification if the user has commented on his own post
+    if (req.body.user_details._id.toString() !== checkPost.user_id.toString()) {
+      // Create a Notification for Comment
+      const newNotification = new notifications({
+        user_id: req.body.user_details._id,
+        notification_type: "comment",
+        post_id: mongoose.Types.ObjectId(req.body.post_id),
+        notify_to: checkPost.user_id,
+        operation_type_id: mongoose.Types.ObjectId(newComment._id),
+        created_at: moment(),
+      });
 
-    await newNotification.save();
+      await newNotification.save();
+    }
 
     return res.status(200).send(messages.commentedSuccess);
   } catch (error) {
