@@ -200,7 +200,7 @@ router.post(
         ),
         message_type: req.body.message_type,
         mime_type: req.body.mime_type || "",
-        message: req.body.message,
+        message: req.body.message.trim(),
         read: req.body.read || false,
         message_datetime: moment(),
       });
@@ -210,7 +210,7 @@ router.post(
         _id: newMessage._id,
         message_type: newMessage.message_type,
         message_datetime: newMessage.message_datetime,
-        message: newMessage.message,
+        message: req.body.message.trim(),
         read: req.body.read || false,
         user_id: mongoose.Types.ObjectId(req.body.user_id),
         reciever_id: mongoose.Types.ObjectId(
