@@ -9,6 +9,7 @@ const { followings } = require("../models/Following");
 const messages = require("../config/messages");
 const { requests } = require("../models/Requests");
 const { users } = require("../models/Users");
+const { SendPushNotification } = require("../utils/push_notifications");
 
 // Initialize router
 const router = express.Router();
@@ -87,6 +88,16 @@ router.post("/send-follow-request", UserAuth, async (req, res) => {
         request_sent_to: request_sent_to,
       });
       await newRequest.save();
+
+      const pushBody = {
+        PushToken: checkUser.PushNotificationToken,
+        imageUrl: req.body.user_details.ProfilePicture,
+        data: {},
+        title: `Socio`,
+        body: `${req.body.user_details.Username} has sent you a follow request`,
+      };
+
+      await SendPushNotification(pushBody);
 
       return res
         .status(200)

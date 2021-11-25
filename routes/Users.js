@@ -186,6 +186,11 @@ router.post("/google-login", async (req, res) => {
     });
     if (!user) return res.status(404).send(messages.accountMissing);
 
+    if (req.body.PushNotificationToken) {
+      user.PushNotificationToken = req.body.PushNotificationToken;
+      await user.save();
+    }
+
     const decodedUser = pick(user.toObject(), [
       "Name",
       "Username",
