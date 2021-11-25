@@ -6,6 +6,7 @@ const { AdminAuth, UserAuth } = require("../schemas/Auth");
 const { notifications } = require("../models/Notifications");
 const messages = require("../config/messages");
 const { requests } = require("../models/Requests");
+const { SendPushNotification } = require("../utils/push_notifications");
 
 // Initialize router
 const router = express.Router();
@@ -136,6 +137,17 @@ router.get("/get-notifications-user", UserAuth, async (req, res) => {
     });
   } catch (error) {
     return res.status(500).send(messages.serverError);
+  }
+});
+
+router.post("/send-push-notification", AdminAuth, async (req, res) => {
+  try {
+    const notificationResponse = await SendPushNotification(req.body);
+    return res
+      .status(notificationResponse.status)
+      .send(notificationResponse.data);
+  } catch (error) {
+    return res.status(500).send("Error");
   }
 });
 
