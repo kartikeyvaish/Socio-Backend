@@ -4,37 +4,47 @@ const messages = require("../config/messages");
 
 const SendPushNotification = async ({
   PushToken = null,
-  Data = null,
-  notification = null,
+  data = null,
+  title,
+  body,
+  channelId = "SocioDefault",
+  imageUrl = null,
 }) => {
   try {
     if (PushToken === null || PushToken.length === 0)
       return { status: 403, data: "Push Token is required" };
 
-    if (Data === null) return { status: 403, data: "Data is required" };
-
-    if (notification === null)
-      return { status: 403, data: "notification is required" };
-
-    if (typeof PushToken !== "string")
-      return { status: 403, data: "Push Token must be a string" };
-
-    if (typeof Data !== "object")
-      return { status: 403, data: "Data must be a valid object" };
-
-    if (typeof notification !== "object")
-      return { status: 403, data: "notification must be a valid object" };
-
-    let message = {
+    const response = await FirebaseApp.messaging().send({
       token: PushToken,
-      notification: notification,
-      data: Data,
-    };
-
-    const response = await Firebase.messaging().send(message);
+      // notification: notification,
+      notification: {
+        title: title,
+        body: body,
+      },
+      android: {
+        notification: {
+          channelId: channelId,
+          // include imageUrl only if its not null
+          ...(imageUrl && {
+            imageUrl: imageUrl,
+          }),
+        },
+      },
+      ...(data && {
+        data: {
+          ...data,
+          // include imageUrl only if its not null
+          ...(imageUrl && {
+            bigPictureUrl: imageUrl,
+            largeIconUrl: imageUrl,
+          }),
+        },
+      }),
+    });
 
     return { status: 200, data: response };
   } catch (error) {
+    console.log(error);
     return { status: 501, data: messages.serverError };
   }
 }; // Push Notify a particular user
