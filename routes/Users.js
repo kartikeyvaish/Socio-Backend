@@ -120,6 +120,7 @@ router.post(
         "Token",
         "_id",
         "ProfilePicture",
+        "Private",
       ]);
 
       return res.status(200).send({ User: decodedUser });
@@ -165,6 +166,7 @@ router.post("/login", async (req, res) => {
       "Email",
       "Bio",
       "ProfilePicture",
+      "Private",
     ]);
 
     return res.status(200).send({ User: decodedUser });
@@ -199,6 +201,7 @@ router.post("/google-login", async (req, res) => {
       "Email",
       "Bio",
       "ProfilePicture",
+      "Private",
     ]);
 
     return res.status(200).send({ User: decodedUser });
