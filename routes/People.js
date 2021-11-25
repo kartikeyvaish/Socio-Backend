@@ -227,16 +227,6 @@ router.get("/get-all-requests-user", UserAuth, async (req, res) => {
           from: "users",
           localField: "user_id",
           foreignField: "_id",
-          // Get only Name, Username and ProfilePicture
-          pipeline: [
-            {
-              $project: {
-                Name: 1,
-                Username: 1,
-                ProfilePicture: 1,
-              },
-            },
-          ],
           as: "user_details",
         },
       },
@@ -247,12 +237,16 @@ router.get("/get-all-requests-user", UserAuth, async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-      // Remove unnecessary fields
+      // Keep only name, username from user_details field
       {
         $project: {
-          user_id: 0,
-          request_sent_to: 0,
-          __v: 0,
+          user_details: {
+            Name: 1,
+            Username: 1,
+            ProfilePicture: 1,
+            _id: 1,
+          },
+          _id: 1,
         },
       },
     ]);
