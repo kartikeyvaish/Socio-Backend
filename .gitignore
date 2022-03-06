@@ -1,3 +1,5 @@
 node_modules/**/*
 .env
-socio_firebasSDK.json
+dist/
+mock/
+socio_firebasSDK.json  
