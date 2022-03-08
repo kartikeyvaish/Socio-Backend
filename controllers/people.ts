@@ -449,6 +449,10 @@ export async function Search(req: Request, res: Response) {
                     _id: { $ne: req.body.user_details._id }
                 },
             },
+            // limit to 10
+            {
+                $limit: 10
+            },
             // Keep only required fields
             {
                 $project: {
