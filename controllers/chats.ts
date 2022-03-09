@@ -9,6 +9,7 @@ import MESSAGES from "../config/messages";
 import following from "../models/following";
 import users from "../models/users";
 import { UploadChatFile } from "../helper/Chats";
+import { send_push_to_user } from "../helper/PushNotifications";
 
 // function to get chats
 export async function getChats(req: Request, res: Response) {
@@ -318,6 +319,10 @@ export async function sendMessage(req: Request, res: Response) {
         if (!chat.members.includes(user_id))
             return res.status(403).send({ message: MESSAGES.unauthorized });
 
+        // reciever id
+        const reciever_id_index = chat.members.findIndex(item => item.toString() !== user_id.toString());
+        const reciever_id = chat.members[reciever_id_index];
+
         // create new message
         const newMessage = new messages({
             chat_id: chat_id,
@@ -353,8 +358,17 @@ export async function sendMessage(req: Request, res: Response) {
             }
         }
 
-        await newMessage.save();
+        // Send Notification
+        if (newMessage.read === false) {
+            let notification_payload = {
+                title: req.body.user_details.name,
+                body: `${req.body.user_details.name} has sent a message - ${req.body.message}`,
+                imageUrl: req.body.user_details.profile_picture,
+            };
+            await send_push_to_user(reciever_id, notification_payload);
+        }
 
+        await newMessage.save();
         // update chat last message
         chat.last_message = newMessage;
 

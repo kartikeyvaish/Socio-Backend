@@ -16,6 +16,7 @@ import messages from "../config/messages";
 import { SendOTPEmail } from "../utils/Mailer";
 import { VERIFICATION_TYPES } from "../schemas/OTP";
 import { VerifyTokenID } from '../utils/GoogleAuth';
+import { send_push_to_user } from '../helper/PushNotifications';
 
 // function to send email OTP for signup
 export async function sendEmailSignUpOTP(req: Request, res: Response) {
@@ -97,6 +98,14 @@ export async function signUp(req: Request, res: Response) {
 
         // Save the user
         await newUser.save();
+
+        let notification_payload = {
+            title: "Socio Admin",
+            body: `Hey, ${newUser.name}, Welcome To Socio. Your account has been created successfully.`,
+            imageUrl: process.env.app_logo,
+        };
+
+        await send_push_to_user(newUser._id, notification_payload);
 
         // Create userData
         const newUserData = get_encoded_data(newUser);
