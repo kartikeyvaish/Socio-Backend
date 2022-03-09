@@ -30,6 +30,7 @@ declare namespace NodeJS {
 
         default_profile_picture: string;
         default_channel_id: string;
+        app_logo: string;
 
         projectId: string;
         clientEmail: string;
